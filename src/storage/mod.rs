@@ -70,6 +70,17 @@ pub struct Db {
     tables: BTreeMap<String, Table>,
     txn: Option<u64>,
     next_txn: u64,
+    /// DDL done inside the open transaction, in order. §6: DDL takes effect
+    /// immediately and ROLLBACK does not undo it — but rollback discards the
+    /// pager's dirty map wholesale, DDL pages included, so `rollback` re-applies
+    /// this list afterwards. See [`Storage::rollback`].
+    txn_ddl: Vec<Ddl>,
+}
+
+/// A DDL statement, kept only long enough for `rollback` to re-apply it.
+enum Ddl {
+    Create(Schema),
+    Drop(String),
 }
 
 impl Db {
@@ -93,6 +104,7 @@ impl Db {
             tables,
             txn: None,
             next_txn: 1,
+            txn_ddl: Vec::new(),
         };
         db.recover()?;
         Ok(db)
@@ -391,6 +403,9 @@ impl Storage for Db {
         self.tables
             .insert(Self::key(&schema.table), Table { heap, index, pk });
         self.persist_meta()?;
+        if self.txn.is_some() {
+            self.txn_ddl.push(Ddl::Create(schema.clone()));
+        }
         let txn = self.stmt_txn();
         self.finish_stmt(txn)
     }
@@ -402,6 +417,9 @@ impl Storage for Db {
         self.catalog.drop(table)?;
         self.tables.remove(&Self::key(table));
         self.persist_meta()?;
+        if self.txn.is_some() {
+            self.txn_ddl.push(Ddl::Drop(table.to_string()));
+        }
         let txn = self.stmt_txn();
         self.finish_stmt(txn)
     }
@@ -474,6 +492,7 @@ impl Storage for Db {
             .txn
             .take()
             .ok_or_else(|| QuernError::Txn("COMMIT outside a transaction".into()))?;
+        self.txn_ddl.clear();
         self.commit_txn(txn)
     }
 
@@ -481,7 +500,21 @@ impl Storage for Db {
         self.txn
             .take()
             .ok_or_else(|| QuernError::Txn("ROLLBACK outside a transaction".into()))?;
+        let ddl = std::mem::take(&mut self.txn_ddl);
         self.reload()?;
+        // §6: DDL takes effect immediately and ROLLBACK does not undo it. The
+        // reload above threw it away with the row work, because a DDL inside an
+        // open transaction has only ever reached the pager's dirty map — so
+        // re-do it here instead. Flushing it at DDL time is what does NOT work:
+        // that would flush the transaction's row pages with it, and those must
+        // die here. Now that the txn is closed each of these commits itself, and
+        // the only dirty pages it can flush are the ones it just made.
+        for op in ddl {
+            match op {
+                Ddl::Create(schema) => self.create_table(&schema)?,
+                Ddl::Drop(table) => self.drop_table(&table)?,
+            }
+        }
         // The aborted records are dead weight in the log, and a later process
         // starting its txn ids at 1 could collide with them.
         self.wal.checkpoint()
@@ -687,6 +720,52 @@ mod tests {
                 .err(),
             Some(QuernError::Type(_))
         ));
+    }
+
+    /// §6: "CREATE TABLE and DROP TABLE take effect immediately and are not
+    /// undone by ROLLBACK" — including inside an open explicit transaction,
+    /// while the row work in that same transaction still dies.
+    #[test]
+    fn rollback_keeps_ddl_but_still_discards_the_rows() {
+        let (dir, mut db) = fresh();
+        let ada = db.insert("t", &row(1, "ada")).unwrap();
+        db.begin().unwrap();
+        db.insert("t", &row(2, "bob")).unwrap();
+        db.create_table(&Schema {
+            table: "dtxn".into(),
+            columns: vec![col("a", Type::Int, true)],
+        })
+        .unwrap();
+        db.rollback().unwrap();
+
+        // The table survived, and its index is USABLE — the failure this guards
+        // against is a table that comes back with a btree root pointing at a
+        // page the rollback discarded, which reads as a zeroed page and errors.
+        let id = db.insert("dtxn", &vec![Value::Int(9)]).unwrap();
+        assert_eq!(
+            db.lookup_pk("dtxn", 9).unwrap(),
+            Some((id, vec![Value::Int(9)]))
+        );
+        // ... and the row work of the rolled-back transaction did not.
+        assert_eq!(rows(&db, "t"), vec![(ada, row(1, "ada"))]);
+
+        // A DROP inside a transaction is not undone either.
+        db.begin().unwrap();
+        db.drop_table("dtxn").unwrap();
+        db.rollback().unwrap();
+        assert!(matches!(
+            db.scan("dtxn").err(),
+            Some(QuernError::Catalog(_))
+        ));
+        drop(db);
+
+        // All of it durable, not just in memory.
+        let db = Db::open(dir.path()).unwrap();
+        assert!(matches!(
+            db.scan("dtxn").err(),
+            Some(QuernError::Catalog(_))
+        ));
+        assert_eq!(rows(&db, "t").len(), 1);
     }
 
     #[test]
