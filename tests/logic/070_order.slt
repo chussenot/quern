@@ -1,14 +1,20 @@
+# 070_order.slt -- ORDER BY corpus (bead bd_30-agents-dwm.32).
+# Every expectation is derived from docs/quern.md: sec 1 for the NULL rule
+# ("NULL sorts last in ASC, first in DESC") and sec 5 for the format.
+#
+# Comments are '#' at column 0, between blocks only, never inside one -- the
+# fleet-wide corpus convention, needing the one runner rule filed as
+# bd_30-agents-dwm.50 (outside a block, skip blank and '#' lines). Keeping
+# them outside also keeps them out of the statement text that sec 5 rule 6
+# scans for ORDER BY, so a comment can never flip an unsorted case to an
+# ordered comparison.
+#
+# Nothing in this file asserts a tie order between rows that differ in a
+# projected column: sec 5 demands determinism but pins no order among equal
+# keys, and the input order a stable sort would preserve is heap order. Every
+# duplicate-key case here either carries an explicit second key or projects
+# the sort key alone (case 10).
 statement ok
--- 070_order.slt -- ORDER BY corpus (bead bd_30-agents-dwm.32).
--- Every expectation is derived from docs/quern.md: sec 1 for the NULL rule
--- ("NULL sorts last in ASC, first in DESC") and sec 5 for the format.
--- Comments live INSIDE blocks as SQL "--" lines, which sec 1 makes legal.
--- Sec 5 pins no comment syntax for the lines BETWEEN blocks, so this file
--- uses none, and no comment here contains a semicolon, so a runner that
--- counts them to enforce rule 1 still sees exactly one statement per block.
--- Comments in a block whose statement has no sort clause never
--- spell the two-word sort keyword, because sec 5 rule 6 matches it against
--- the whole statement text.
 CREATE TABLE t_int (a INT PRIMARY KEY, b INT);
 
 statement ok
@@ -26,16 +32,16 @@ CREATE TABLE t_bool (a INT PRIMARY KEY, f BOOL);
 statement ok
 INSERT INTO t_bool (a, f) VALUES (1, TRUE), (2, FALSE), (3, TRUE), (4, FALSE);
 
+# NULLs only in non-PK columns: a PRIMARY KEY has no null case in sec 1.
 statement ok
--- NULLs only in non-PK columns: a PRIMARY KEY has no null case in sec 1.
 CREATE TABLE t_null (a INT PRIMARY KEY, n INT, w TEXT);
 
 statement ok
 INSERT INTO t_null (a, n, w) VALUES (1, 5, 'bb'), (2, NULL, NULL), (3, 1, 'aa'), (4, 3, 'cc'), (5, NULL, NULL);
 
+# case 1: bare ORDER BY is ascending (sec 1 spells DESC explicitly, so the
+# unmarked direction is the ascending one).
 query
--- case 1: bare ORDER BY is ascending (sec 1 spells DESC explicitly, so the
--- unmarked direction is the ascending one).
 SELECT a FROM t_int ORDER BY a;
 ----
 1
@@ -43,8 +49,8 @@ SELECT a FROM t_int ORDER BY a;
 3
 4
 
+# case 2: explicit ASC on INT.
 query
--- case 2: explicit ASC on INT.
 SELECT a FROM t_int ORDER BY a ASC;
 ----
 1
@@ -52,8 +58,8 @@ SELECT a FROM t_int ORDER BY a ASC;
 3
 4
 
+# case 3: DESC on INT.
 query
--- case 3: DESC on INT.
 SELECT a FROM t_int ORDER BY a DESC;
 ----
 4
@@ -61,9 +67,9 @@ SELECT a FROM t_int ORDER BY a DESC;
 2
 1
 
+# case 4: two ascending keys. b ties at 10 for a=2 and a=4, and the second
+# key decides -- so the expectation does not depend on tie handling.
 query
--- case 4: two ascending keys. b ties at 10 for a=2 and a=4, and the second
--- key decides -- so the expectation does not depend on tie handling.
 SELECT a, b FROM t_int ORDER BY b ASC, a ASC;
 ----
 2	10
@@ -71,8 +77,8 @@ SELECT a, b FROM t_int ORDER BY b ASC, a ASC;
 3	20
 1	30
 
+# case 5: leading key DESC, trailing key ASC.
 query
--- case 5: leading key DESC, trailing key ASC.
 SELECT a, b FROM t_int ORDER BY b DESC, a ASC;
 ----
 1	30
@@ -80,9 +86,9 @@ SELECT a, b FROM t_int ORDER BY b DESC, a ASC;
 2	10
 4	10
 
+# case 6: mixed directions, ASC then DESC -- the b=10 pair reverses relative
+# to case 4, which is what proves the second key's direction is honoured.
 query
--- case 6: mixed directions, ASC then DESC -- the b=10 pair reverses relative
--- to case 4, which is what proves the second key's direction is honoured.
 SELECT a, b FROM t_int ORDER BY b ASC, a DESC;
 ----
 4	10
@@ -90,9 +96,9 @@ SELECT a, b FROM t_int ORDER BY b ASC, a DESC;
 3	20
 1	30
 
+# case 7: ordering by an expression. a + b is 31, 12, 23, 14 for a=1..4, all
+# distinct, so DESC is fully pinned: 31, 23, 14, 12.
 query
--- case 7: ordering by an expression. a + b is 31, 12, 23, 14 for a=1..4, all
--- distinct, so DESC is fully pinned: 31, 23, 14, 12.
 SELECT a, b FROM t_int ORDER BY a + b DESC;
 ----
 1	30
@@ -100,8 +106,8 @@ SELECT a, b FROM t_int ORDER BY a + b DESC;
 4	10
 2	10
 
+# case 8: expression key plus a tiebreak column.
 query
--- case 8: expression key plus a tiebreak column.
 SELECT a, b FROM t_int ORDER BY b * 2 ASC, a ASC;
 ----
 2	10
@@ -109,12 +115,12 @@ SELECT a, b FROM t_int ORDER BY b * 2 ASC, a ASC;
 3	20
 1	30
 
+# case 9: ordering by an aliased projection column. sec 1's grammar shows
+# AS in the projection and ORDER BY over a base column, but does not pin
+# whether the sort resolves against the projection's aliases. Filed as a
+# spec gap, bd_30-agents-dwm.49. Expectation assumes it does, which is the
+# SQL-standard reading.
 query
--- case 9: ordering by an aliased projection column. sec 1's grammar shows
--- AS in the projection and ORDER BY over a base column, but does not pin
--- whether the sort resolves against the projection's aliases. Filed as a
--- spec gap, bd_30-agents-dwm.49. Expectation assumes it does, which is the
--- SQL-standard reading.
 SELECT a AS id, b FROM t_int ORDER BY id DESC;
 ----
 4	10
@@ -122,12 +128,12 @@ SELECT a AS id, b FROM t_int ORDER BY id DESC;
 2	10
 1	30
 
+# case 10: equal keys. sec 5 demands determinism but pins no tie order, and
+# the input order a tie would preserve is heap order -- so this case projects
+# ONLY the sort key: the two b=10 rows render identically and the block is
+# correct under any tie handling. No case in this file asserts a tie order
+# between rows that differ in a projected column.
 query
--- case 10: equal keys. sec 5 demands determinism but pins no tie order, and
--- the input order a tie would preserve is heap order -- so this case projects
--- ONLY the sort key: the two b=10 rows render identically and the block is
--- correct under any tie handling. No case in this file asserts a tie order
--- between rows that differ in a projected column.
 SELECT b FROM t_int ORDER BY b ASC;
 ----
 10
@@ -135,10 +141,10 @@ SELECT b FROM t_int ORDER BY b ASC;
 20
 30
 
+# case 11: ASC on TEXT. All values are lowercase ASCII, so byte order (the
+# order sec 5 rule 5 names) and lexicographic order agree. 'ap' is a prefix
+# of 'apple' and sorts before it.
 query
--- case 11: ASC on TEXT. All values are lowercase ASCII, so byte order (the
--- order sec 5 rule 5 names) and lexicographic order agree. 'ap' is a prefix
--- of 'apple' and sorts before it.
 SELECT w FROM t_text ORDER BY w ASC;
 ----
 ap
@@ -147,8 +153,8 @@ banana
 fig
 pear
 
+# case 12: DESC on TEXT.
 query
--- case 12: DESC on TEXT.
 SELECT w FROM t_text ORDER BY w DESC;
 ----
 pear
@@ -157,20 +163,20 @@ banana
 apple
 ap
 
+# case 13: ORDER BY applies after WHERE.
 query
--- case 13: ORDER BY applies after WHERE.
 SELECT a, w FROM t_text WHERE a > 2 ORDER BY w DESC;
 ----
 3	fig
 4	banana
 5	ap
 
+# case 14: ASC on BOOL -- FALSE before TRUE. sec 1 admits < and > on BOOL
+# but never states which of TRUE/FALSE is the lesser, so this ordering is
+# filed as a spec gap, bd_30-agents-dwm.47. The expectation follows Rust's
+# own bool ordering (false < true), which Value's derive would give.
+# a ASC breaks the ties.
 query
--- case 14: ASC on BOOL -- FALSE before TRUE. sec 1 admits < and > on BOOL
--- but never states which of TRUE/FALSE is the lesser, so this ordering is
--- filed as a spec gap, bd_30-agents-dwm.47. The expectation follows Rust's
--- own bool ordering (false < true), which Value's derive would give.
--- a ASC breaks the ties.
 SELECT a, f FROM t_bool ORDER BY f ASC, a ASC;
 ----
 2	FALSE
@@ -178,8 +184,8 @@ SELECT a, f FROM t_bool ORDER BY f ASC, a ASC;
 1	TRUE
 3	TRUE
 
+# case 15: DESC on BOOL -- TRUE first, same gap as case 14.
 query
--- case 15: DESC on BOOL -- TRUE first, same gap as case 14.
 SELECT a, f FROM t_bool ORDER BY f DESC, a ASC;
 ----
 1	TRUE
@@ -187,9 +193,9 @@ SELECT a, f FROM t_bool ORDER BY f DESC, a ASC;
 2	FALSE
 4	FALSE
 
+# case 16: NULL placement on INT, ASC -- sec 1: NULL sorts LAST in ASC. The
+# two NULL rows tie on the leading key, so a ASC pins them.
 query
--- case 16: NULL placement on INT, ASC -- sec 1: NULL sorts LAST in ASC. The
--- two NULL rows tie on the leading key, so a ASC pins them.
 SELECT a, n FROM t_null ORDER BY n ASC, a ASC;
 ----
 3	1
@@ -198,10 +204,10 @@ SELECT a, n FROM t_null ORDER BY n ASC, a ASC;
 2	NULL
 5	NULL
 
+# case 17: NULL placement on INT, DESC -- sec 1: NULL sorts FIRST in DESC.
+# Note the NULL group leads even though the trailing key stays ASC: NULL
+# placement follows the direction of the key it belongs to.
 query
--- case 17: NULL placement on INT, DESC -- sec 1: NULL sorts FIRST in DESC.
--- Note the NULL group leads even though the trailing key stays ASC: NULL
--- placement follows the direction of the key it belongs to.
 SELECT a, n FROM t_null ORDER BY n DESC, a ASC;
 ----
 2	NULL
@@ -210,8 +216,8 @@ SELECT a, n FROM t_null ORDER BY n DESC, a ASC;
 4	3
 3	1
 
+# case 18: NULL placement on TEXT, ASC -- same rule on a second type.
 query
--- case 18: NULL placement on TEXT, ASC -- same rule on a second type.
 SELECT a, w FROM t_null ORDER BY w ASC, a ASC;
 ----
 3	aa
@@ -220,8 +226,8 @@ SELECT a, w FROM t_null ORDER BY w ASC, a ASC;
 2	NULL
 5	NULL
 
+# case 19: NULL placement on TEXT, DESC.
 query
--- case 19: NULL placement on TEXT, DESC.
 SELECT a, w FROM t_null ORDER BY w DESC, a ASC;
 ----
 2	NULL
@@ -230,9 +236,9 @@ SELECT a, w FROM t_null ORDER BY w DESC, a ASC;
 1	bb
 3	aa
 
+# case 20: the sort key is an expression over a nullable column. sec 1:
+# arithmetic with Null yields Null, so those rows sort last in ASC.
 query
--- case 20: the sort key is an expression over a nullable column. sec 1:
--- arithmetic with Null yields Null, so those rows sort last in ASC.
 SELECT a, n FROM t_null ORDER BY n + 1 ASC, a ASC;
 ----
 3	1
@@ -241,9 +247,9 @@ SELECT a, n FROM t_null ORDER BY n + 1 ASC, a ASC;
 2	NULL
 5	NULL
 
+# case 21: the sort key is a BOOL-valued expression (a > 2). DESC puts the
+# TRUE rows first, per the case 14 gap.
 query
--- case 21: the sort key is a BOOL-valued expression (a > 2). DESC puts the
--- TRUE rows first, per the case 14 gap.
 SELECT a FROM t_null ORDER BY a > 2 DESC, a ASC;
 ----
 3
@@ -252,15 +258,15 @@ SELECT a FROM t_null ORDER BY a > 2 DESC, a ASC;
 1
 2
 
+# case 22: ORDER BY over an empty result. n = 999 is false for the INT rows
+# and Null for the NULL rows, and sec 1 keeps a row only on Bool(true), so
+# nothing survives. Zero expected rows is ---- then a blank line (sec 5
+# rule 3).
 query
--- case 22: ORDER BY over an empty result. n = 999 is false for the INT rows
--- and Null for the NULL rows, and sec 1 keeps a row only on Bool(true), so
--- nothing survives. Zero expected rows is ---- then a blank line (sec 5
--- rule 3).
 SELECT a, n FROM t_null WHERE n = 999 ORDER BY a;
 ----
 
+# case 23: ordering by a column that does not exist is an Err, not a panic
+# (sec 1, "errors are values").
 statement error
--- case 23: ordering by a column that does not exist is an Err, not a panic
--- (sec 1, "errors are values").
 SELECT a FROM t_int ORDER BY nosuch;
