@@ -134,6 +134,19 @@ pub trait Operator {
 }
 ```
 
+`sql/ast.rs` — `AggExpr`, referenced by `LogicalPlan::Aggregate` below. It
+lives here, with the rest of the AST; `plan/logical.rs` imports it and does
+not define a second copy:
+
+```rust
+pub enum AggFunc { Count, Sum, Min, Max, Avg }
+pub struct AggExpr {
+    pub func: AggFunc,
+    pub arg: Option<Expr>,   // None only for COUNT(*)
+    pub alias: String,       // AS alias, else the source spelling: "SUM(a)"
+}
+```
+
 `plan/logical.rs`:
 
 ```rust
@@ -184,7 +197,7 @@ in an implicit one that commits on success.
 ## 5. Grading
 
 **The corpus.** `tests/logic/*.slt`, sqllogictest-flavoured, ~150 cases.
-Two directives only:
+Three directives only:
 
 ```
 statement ok
