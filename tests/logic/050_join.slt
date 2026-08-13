@@ -1,0 +1,246 @@
+# 050_join.slt -- inner JOIN. Derived from docs/quern.md §1 (SQL surface, the
+# NULL rule) and the six pinned format rules of §5.
+#
+# Three properties of quern's join surface that every case below leans on:
+#
+#   * INNER JOIN ONLY. §1's non-goals rule out LEFT/RIGHT/OUTER, and ast::
+#     SelectStmt carries `join: Option<Join>` -- at most one, never outer. A row
+#     on either side that matches nothing is ABSENT from the output, not padded
+#     with NULLs. Cases 1, 8 and 14 each have unmatched rows on both sides.
+#   * A NULL JOIN KEY MATCHES NOTHING, including another NULL. The ON clause is
+#     a comparison, so §1's NULL rule applies: `NULL = 7` and `NULL = NULL` are
+#     both Value::Null, and a row survives a predicate only when it is exactly
+#     Bool(true). Cases 17 and 18.
+#   * There are no table aliases in §1's grammar, so a qualifier is always the
+#     table's own name. An unqualified name is only used where it is unique
+#     across both sides (case 9).
+#
+# Format notes, per §5: no query here has ORDER BY, so every block is compared
+# as a byte-sorted multiset -- the row ORDER written below is not graded, but
+# the row COUNT is, which is the whole point of case 15. Zero expected rows is
+# `----` followed by a blank line (rule 3): cases 6, 7, 11 and 16. No row
+# renders as an entirely empty line (rule 4). Comment lines are `#` at column 0
+# and appear only between blocks (bd_30-agents-dwm.50).
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b TEXT);
+
+statement ok
+CREATE TABLE u (a INT PRIMARY KEY, b TEXT);
+
+statement ok
+INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three');
+
+statement ok
+INSERT INTO u VALUES (2, 'deux'), (3, 'trois'), (4, 'quatre');
+
+# 1. Inner join on the INTEGER PRIMARY KEY of both sides. t.a = 1 matches
+#    nothing on the right and u.a = 4 matches nothing on the left; both are
+#    absent, because there is no outer join to pad them.
+query
+SELECT t.a, t.b, u.b FROM t JOIN u ON t.a = u.a;
+----
+2	two	deux
+3	three	trois
+
+# 2. Join plus WHERE, qualified names in both the ON clause and the WHERE
+#    clause. This is §1's own example shape.
+query
+SELECT t.a, u.b FROM t JOIN u ON t.a = u.a WHERE u.b <> 'trois';
+----
+2	deux
+
+# 3. The projection may name the right table's columns before the left's. The
+#    join's internal column order (left columns, then right) is not the output
+#    order -- Project decides that.
+query
+SELECT u.b, t.a FROM t JOIN u ON t.a = u.a;
+----
+deux	2
+trois	3
+
+# 4. SELECT * over a join expands to the left schema followed by the right
+#    schema, so both `a` columns appear, in that order.
+query
+SELECT * FROM t JOIN u ON t.a = u.a;
+----
+2	two	2	deux
+3	three	3	trois
+
+# 5. The ON clause is an arbitrary predicate, not just equality: `>` gives a
+#    single surviving pair out of the nine candidates.
+query
+SELECT t.a, u.a FROM t JOIN u ON t.a > u.a;
+----
+3	2
+
+statement ok
+CREATE TABLE e (x INT PRIMARY KEY, y TEXT);
+
+# 6. Zero rows, because one side is empty. §5 rule 3: `----` followed
+#    immediately by a blank line is a legal zero-row expectation.
+query
+SELECT t.a, e.y FROM t JOIN e ON t.a = e.x;
+----
+
+# 7. Zero rows, because the WHERE eliminates every joined row. The join itself
+#    produced two.
+query
+SELECT t.a, u.a FROM t JOIN u ON t.a = u.a WHERE u.b = 'nope';
+----
+
+statement ok
+CREATE TABLE emp (id INT PRIMARY KEY, name TEXT, dept INT);
+
+statement ok
+CREATE TABLE dept (id INT PRIMARY KEY, dname TEXT);
+
+statement ok
+INSERT INTO emp VALUES (1, 'ann', 10), (2, 'bob', 20), (3, 'cid', 10), (4, 'dee', 99);
+
+statement ok
+INSERT INTO dept VALUES (10, 'eng'), (20, 'ops'), (30, 'hr');
+
+# 8. Join on a NON-PRIMARY-KEY column of the left side (emp.dept) against the
+#    PK of the right. Two employees share dept 10, so 'eng' appears twice.
+#    'dee' (dept 99, no such department) and 'hr' (no employees) are both
+#    absent -- unmatched rows on both sides at once.
+query
+SELECT emp.name, dept.dname FROM emp JOIN dept ON emp.dept = dept.id;
+----
+ann	eng
+bob	ops
+cid	eng
+
+# 9. The same join projecting UNQUALIFIED names. Legal only because `name` and
+#    `dname` each occur in exactly one of the two schemas.
+query
+SELECT name, dname FROM emp JOIN dept ON emp.dept = dept.id;
+----
+ann	eng
+bob	ops
+cid	eng
+
+# 10. Join with a WHERE on the right side only: the two members of one
+#     department, one column wide.
+query
+SELECT emp.name FROM emp JOIN dept ON emp.dept = dept.id WHERE dept.dname = 'eng';
+----
+ann
+cid
+
+# 11. Zero rows: 'hr' exists, but no employee references it. An INNER join
+#     drops it -- a LEFT join, which quern does not have, would not.
+query
+SELECT emp.name, dept.dname FROM emp JOIN dept ON emp.dept = dept.id WHERE dept.dname = 'hr';
+----
+
+# 12. Arithmetic over a joined row: the projection is evaluated against the
+#     concatenated left-then-right row, so emp.dept resolves the same way in a
+#     Project as it does in the ON clause.
+query
+SELECT emp.id, emp.dept + 1 FROM emp JOIN dept ON emp.dept = dept.id;
+----
+1	11
+2	21
+3	11
+
+# 13. A WHERE naming BOTH sides, combined with AND.
+query
+SELECT emp.name, dept.dname FROM emp JOIN dept ON emp.dept = dept.id WHERE emp.id > 1 AND dept.dname = 'eng';
+----
+cid	eng
+
+statement ok
+CREATE TABLE l (k INT PRIMARY KEY, g INT);
+
+statement ok
+CREATE TABLE r (k INT PRIMARY KEY, g INT);
+
+statement ok
+INSERT INTO l VALUES (1, 7), (2, 7), (3, 8);
+
+statement ok
+INSERT INTO r VALUES (10, 7), (11, 7), (12, 9);
+
+# 14. Many-to-many: the join column is a NON-PK column on BOTH sides, and the
+#     value 7 occurs twice on each. Two times two is four rows. l.k = 3 (g = 8)
+#     and r.k = 12 (g = 9) match nothing and are absent.
+query
+SELECT l.k, r.k FROM l JOIN r ON l.g = r.g;
+----
+1	10
+1	11
+2	10
+2	11
+
+# 15. The same four rows projected down to just the join key, so they render
+#     IDENTICALLY. §5 rule 5 compares a multiset, so all four must come back:
+#     three rows here is a failure, not a de-duplication.
+query
+SELECT l.g, r.g FROM l JOIN r ON l.g = r.g;
+----
+7	7
+7	7
+7	7
+7	7
+
+# 16. Zero rows from two non-empty tables whose key ranges are disjoint.
+query
+SELECT l.k, r.k FROM l JOIN r ON l.k = r.k;
+----
+
+statement ok
+CREATE TABLE nl (k INT PRIMARY KEY, g INT);
+
+statement ok
+CREATE TABLE nr (k INT PRIMARY KEY, g INT);
+
+statement ok
+INSERT INTO nl VALUES (1, NULL), (2, 7), (3, NULL);
+
+statement ok
+INSERT INTO nr VALUES (5, NULL), (6, 7);
+
+# 17. A NULL join key matches nothing: `NULL = 7` is Value::Null, and §1 keeps
+#     a row only when the predicate is exactly Bool(true). nl.k = 1 and 3 are
+#     absent; only k = 2 joins, and it joins twice.
+query
+SELECT nl.k, r.k FROM nl JOIN r ON nl.g = r.g;
+----
+2	10
+2	11
+
+# 18. NULL does not even match NULL. Both sides have a NULL g here, and the
+#     only output row is the 7-to-7 pair.
+query
+SELECT nl.k, nr.k FROM nl JOIN nr ON nl.g = nr.g;
+----
+2	6
+
+# 19. NULL printing in a join's output, and an expression in the ON clause. The
+#     key is nl.k + 4 = nr.k, which pairs (1,5) and (2,6); the g columns of the
+#     first pair are both NULL and print as NULL (§5).
+query
+SELECT nl.k, nl.g, nr.g FROM nl JOIN nr ON nl.k + 4 = nr.k;
+----
+1	NULL	NULL
+2	7	7
+
+# 20. Unknown table on the right of the JOIN: an error value, not a panic (§1).
+statement error
+SELECT t.a, nosuch.a FROM t JOIN nosuch ON t.a = nosuch.a;
+
+# 21. Unknown column on a known, correctly-qualified table.
+statement error
+SELECT t.a, u.zz FROM t JOIN u ON t.a = u.a;
+
+# 22. Type mismatch in the ON clause: §1's `=` compares INT with INT or TEXT
+#     with TEXT, never one with the other.
+statement error
+SELECT t.a, u.b FROM t JOIN u ON t.a = u.b;
+
+# 23. A qualifier naming a table that exists in the database but is not in this
+#     statement's FROM/JOIN cannot be resolved.
+statement error
+SELECT t.a FROM t JOIN u ON t.a = u.a WHERE dept.id = 10;

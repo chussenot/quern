@@ -1,0 +1,254 @@
+# 060_group.slt -- GROUP BY and the five aggregates. Derived from docs/quern.md
+# §1 (SQL surface, the NULL rule), §3 (AggExpr) and §5 (the pinned format).
+#
+# The contracts every case below is written against:
+#
+#   * OUTPUT COLUMN ORDER: an Aggregate row is exactly group_by.len() +
+#     aggs.len() values -- the group keys in GROUP BY order FIRST, then the
+#     aggregates in SELECT order (§3 / bd_30-agents-dwm.39). Every query here
+#     writes its SELECT list in that same order, so the expected rows read the
+#     same whether or not a Project permutes above the Aggregate.
+#   * NULL INPUTS: aggregates skip Null; COUNT(*) counts ROWS (§1). Cases 2, 3
+#     and 4 are that contrast, on the same groups: COUNT(*) = 3 next to a SUM
+#     over only 2 surviving values.
+#   * NO GROUP BY = ONE GROUP over the whole table, emitted even when the input
+#     is empty -- COUNT(*) of nothing is one row containing 0, not zero rows
+#     (bd_30-agents-dwm.39). Cases 5, 6, 9, 10, 13, 17, 18.
+#   * AVG OVER INT TRUNCATES TOWARD ZERO, so AVG of (1,2) is 1 and AVG of
+#     (-1,-2) is -1, not -2. Cases 12 and 13.
+#
+# Two expectations here are UNPINNED by the spec and are written to the answer
+# proposed in the bead that files the gap. Each is flagged at the case:
+#
+#   bd_30-agents-dwm.45 -- SUM/MIN/MAX/AVG over a group with zero surviving
+#     (non-Null) inputs. Written as NULL; COUNT over the same is written as 0.
+#     Cases 1, 3, 10.
+#   bd_30-agents-dwm.46 -- whether Null is a group key. Written as: all Null
+#     keys form ONE group, printed NULL. Case 15.
+#
+# Format notes, per §5: no query here has ORDER BY, so every block is compared
+# as a byte-sorted multiset and the row order written below is not graded.
+# Determinism of GROUP BY output order is therefore not asserted by this file --
+# §5 requires it, but the harness cannot see it. Zero expected rows is `----`
+# then a blank line (cases 8, 11). Comment lines are `#` at column 0, between
+# blocks only (bd_30-agents-dwm.50).
+
+statement ok
+CREATE TABLE s (id INT PRIMARY KEY, g TEXT, v INT, f BOOL);
+
+statement ok
+INSERT INTO s VALUES (1, 'a', 10, TRUE), (2, 'a', 20, TRUE), (3, 'b', 5, FALSE), (4, 'b', NULL, TRUE), (5, 'c', NULL, FALSE), (6, 'c', NULL, FALSE);
+
+# 1. All five aggregates, grouped by a TEXT column -- §1's own example. Group
+#    'a' has two values; 'b' has one value and one NULL, so SUM/MIN/MAX/AVG see
+#    a single input while COUNT(*) sees two rows; 'c' is all NULL.
+#    UNPINNED (bd_30-agents-dwm.45): group 'c' has nothing left after skipping
+#    NULL. Written as NULL for SUM/MIN/MAX/AVG.
+query
+SELECT g, COUNT(*), SUM(v), MIN(v), MAX(v), AVG(v) FROM s GROUP BY g;
+----
+a	2	30	10	20	15
+b	2	5	5	5	5
+c	2	NULL	NULL	NULL	NULL
+
+# 2. COUNT(*) versus SUM on ONE group, isolated: two rows counted, one value
+#    summed. This is the whole NULL-skip rule in a single row.
+query
+SELECT g, COUNT(*), SUM(v) FROM s WHERE g = 'b' GROUP BY g;
+----
+b	2	5
+
+# 3. COUNT(*) versus COUNT(v). COUNT(*) counts rows and is 2 everywhere;
+#    COUNT(v) skips NULL like every other aggregate, so it is 2, 1 and 0.
+#    UNPINNED (bd_30-agents-dwm.45): COUNT of zero surviving inputs written
+#    as 0 -- a count has a defined answer where a SUM does not.
+query
+SELECT g, COUNT(*), COUNT(v) FROM s GROUP BY g;
+----
+a	2	2
+b	2	1
+c	2	0
+
+# 4. Grouping by a BOOL column, all five aggregates. Both groups hold three
+#    rows, and both contain NULLs, so COUNT(*) is 3 while AVG divides by 2 in
+#    the TRUE group and by 1 in the FALSE group. Keys print TRUE/FALSE (§5).
+query
+SELECT f, COUNT(*), SUM(v), MIN(v), MAX(v), AVG(v) FROM s GROUP BY f;
+----
+FALSE	3	5	5	5	5
+TRUE	3	30	10	20	15
+
+# 5. Single-group aggregation with NO GROUP BY clause: one row over the whole
+#    table. Six rows, three surviving values (10, 20, 5), so AVG is 35 / 3 = 11
+#    after truncation.
+query
+SELECT COUNT(*), SUM(v), MIN(v), MAX(v), AVG(v) FROM s;
+----
+6	35	5	20	11
+
+# 6. No GROUP BY, with a WHERE. NULL > 5 is NULL, not TRUE, so the three NULL
+#    rows are filtered out before aggregation, along with v = 5.
+query
+SELECT COUNT(*), SUM(v) FROM s WHERE v > 5;
+----
+2	30
+
+# 7. WHERE combined with GROUP BY: groups 'b' and 'c' lose every row and so
+#    vanish entirely -- a group with no surviving rows is not emitted as a zero
+#    row. Only the empty-GROUP-BY case (5, 9, 10) survives an empty input.
+query
+SELECT g, COUNT(*), SUM(v) FROM s WHERE v > 5 GROUP BY g;
+----
+a	2	30
+
+# 8. GROUP BY over an input the WHERE emptied: ZERO rows back.
+query
+SELECT g, COUNT(*) FROM s WHERE v > 1000 GROUP BY g;
+----
+
+# 9. The same empty input with NO GROUP BY: exactly ONE row, containing 0.
+#    Contrast with case 8 -- this is the difference the empty group_by makes.
+query
+SELECT COUNT(*) FROM s WHERE v > 1000;
+----
+0
+
+statement ok
+CREATE TABLE et (id INT PRIMARY KEY, v INT);
+
+# 10. No GROUP BY over a genuinely EMPTY TABLE: one row, count 0.
+#     UNPINNED (bd_30-agents-dwm.45): the other four aggregates have no input
+#     at all here. Written as NULL, which also keeps AVG's integer division
+#     away from a zero divisor -- §1 makes divide-by-zero an error, and an
+#     aggregate over an empty table returning an error would be surprising.
+query
+SELECT COUNT(*), SUM(v), MIN(v), MAX(v), AVG(v) FROM et;
+----
+0	NULL	NULL	NULL	NULL
+
+# 11. GROUP BY over an empty table: zero rows, because there are no groups.
+query
+SELECT id, COUNT(*) FROM et GROUP BY id;
+----
+
+statement ok
+CREATE TABLE av (id INT PRIMARY KEY, g TEXT, v INT);
+
+statement ok
+INSERT INTO av VALUES (1, 'p', 1), (2, 'p', 2), (3, 'n', -1), (4, 'n', -2), (5, 'z', 7), (6, 'z', 8), (7, 'z', 9);
+
+# 12. AVG over INT truncates TOWARD ZERO, not toward negative infinity. Group
+#     'p' is 3 / 2 = 1; group 'n' is -3 / 2 = -1 (floor would give -2); group
+#     'z' is 24 / 3 = 8 exactly. SUM and COUNT(*) are projected alongside so
+#     the truncation is visible rather than inferred.
+query
+SELECT g, SUM(v), COUNT(*), AVG(v) FROM av GROUP BY g;
+----
+n	-3	2	-1
+p	3	2	1
+z	24	3	8
+
+# 13. The same truncation in the single-group case: 24 / 7 = 3.
+query
+SELECT COUNT(*), SUM(v), AVG(v) FROM av;
+----
+7	24	3
+
+# 14. Aggregates with AS aliases. §5 compares no headers, so the aliases are
+#     exercised through the parser and planner without being graded.
+query
+SELECT g, COUNT(*) AS n, SUM(v) AS total FROM av GROUP BY g;
+----
+n	2	-3
+p	2	3
+z	3	24
+
+statement ok
+CREATE TABLE ng (id INT PRIMARY KEY, g TEXT, v INT);
+
+statement ok
+INSERT INTO ng VALUES (1, 'x', 1), (2, NULL, 2), (3, NULL, 3), (4, 'x', 4);
+
+# 15. A NULL GROUP KEY.
+#     UNPINNED (bd_30-agents-dwm.46): `NULL = NULL` is NULL, so GROUP BY cannot
+#     be defined on `=`. Written to the proposal: grouping is on value
+#     identity, all NULL keys collapse into ONE group, and that key prints as
+#     NULL. The two NULL rows sum to 5, as do the two 'x' rows -- so a wrong
+#     answer here shows up as a row count, not as a value.
+query
+SELECT g, COUNT(*), SUM(v) FROM ng GROUP BY g;
+----
+NULL	2	5
+x	2	5
+
+# 16. Grouping by an INT column that is the PRIMARY KEY: every group holds
+#     exactly one row, so the aggregate degenerates to the row itself.
+query
+SELECT id, COUNT(*), SUM(v) FROM ng GROUP BY id;
+----
+1	1	1
+2	1	2
+3	1	3
+4	1	4
+
+# 17. MIN and MAX over TEXT. §1's comparison operators work on TEXT, so the two
+#     order-based aggregates do too; SUM and AVG do not (case 20).
+query
+SELECT COUNT(*), MIN(g), MAX(g) FROM s;
+----
+6	a	c
+
+# 18. MIN and MAX over BOOL, under the same single total order on Value that
+#     ORDER BY uses.
+#     UNPINNED (bd_30-agents-dwm.47, filed by slt-order-limit for ORDER BY):
+#     §1 admits < and > on BOOL and never says which of TRUE/FALSE is lesser.
+#     Written as FALSE < TRUE -- Rust's own bool order, and what 070_order.slt
+#     assumes. Whatever resolves .47 must cover MIN/MAX too, not just Sort.
+query
+SELECT COUNT(*), MIN(f), MAX(f) FROM s;
+----
+6	FALSE	TRUE
+
+statement ok
+CREATE TABLE ord (id INT PRIMARY KEY, cust INT, amt INT);
+
+statement ok
+CREATE TABLE cust (id INT PRIMARY KEY, cname TEXT);
+
+statement ok
+INSERT INTO ord VALUES (1, 100, 5), (2, 100, 7), (3, 200, 3), (4, 300, 9);
+
+statement ok
+INSERT INTO cust VALUES (100, 'ann'), (200, 'bob');
+
+# 19. GROUP BY over a JOIN, grouping on a qualified column of the right side.
+#     Order 4 belongs to customer 300, which has no cust row, so the INNER join
+#     drops it before aggregation -- its 9 appears in no SUM.
+query
+SELECT cust.cname, COUNT(*), SUM(ord.amt) FROM ord JOIN cust ON ord.cust = cust.id GROUP BY cust.cname;
+----
+ann	2	12
+bob	1	3
+
+# 20. SUM over TEXT: §1's arithmetic is INT-only, so this is a type error
+#     value, not a panic.
+statement error
+SELECT SUM(g) FROM s;
+
+# 21. There is no HAVING in quern (§1 non-goals).
+statement error
+SELECT g, COUNT(*) FROM s GROUP BY g HAVING COUNT(*) > 1;
+
+# 22. An aggregate in WHERE is the same thing HAVING would have been, and is
+#     rejected by the parser.
+statement error
+SELECT g FROM s WHERE COUNT(*) > 1 GROUP BY g;
+
+# 23. There is no DISTINCT in quern (§1 non-goals), inside an aggregate or
+#     anywhere else.
+statement error
+SELECT COUNT(DISTINCT g) FROM s;
+
+# 24. Unknown column in the GROUP BY clause.
+statement error
+SELECT zz, COUNT(*) FROM s GROUP BY zz;
