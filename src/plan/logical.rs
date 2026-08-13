@@ -26,8 +26,14 @@
 //!
 //! `Sort` is above `Project`, so `ORDER BY` resolves against the *projected*
 //! output: `ORDER BY n` finds `b + 1 AS n`, and `ORDER BY COUNT(*)` finds the
-//! projected aggregate. The flip side, and a deliberate limitation: a key that
-//! was not projected (`SELECT a FROM t ORDER BY b`) is an unknown column.
+//! projected aggregate. §6 requires two more forms, and both work here: the base
+//! name of a column the projection renamed (`SELECT a AS id FROM t ORDER BY a`),
+//! because a projected column answers to both names; and a key that is *not
+//! projected at all* (`SELECT a + 10 FROM t ORDER BY a`), which is added to the
+//! lower `Project` as a hidden extra column and trimmed off by a second
+//! `Project` above the `Sort`. So an ordered query with an unprojected key is
+//! `Project(Sort(Project(..)))` and its output shape is unchanged. Ordering by an
+//! expression (`ORDER BY a + b`) is the same mechanism.
 //!
 //! `SelectItem::Star` is expanded here into one `Project` expression per input
 //! column; the star never reaches an operator. `Insert` is normalised into full
@@ -151,11 +157,22 @@ pub fn lower(stmt: &Statement, catalog: &Catalog) -> Result<LogicalPlan> {
 
 // --- name resolution --------------------------------------------------------
 
-/// The shape an `Expr` resolves against: one `(qualifier, name)` per column, in
-/// index order. `qualifier` is the table the column came from, `None` for a
-/// derived column. `label` is what a miss is called in the error message.
+/// One column of the shape an `Expr` resolves against.
+#[derive(Clone)]
+struct ScopeCol {
+    /// The table the column came from; `None` for a derived column.
+    qualifier: Option<String>,
+    /// Every name this column answers to. `names[0]` is its *output* name — the
+    /// `AS` alias when there was one — and a second entry is the base column
+    /// name when a projection renamed it, so §6 case 2 (`SELECT a AS id FROM t
+    /// ORDER BY a`) resolves without giving up the alias.
+    names: Vec<String>,
+}
+
+/// The shape an `Expr` resolves against: one column per index, in index order.
+/// `label` is what a miss is called in the error message.
 struct Scope {
-    cols: Vec<(Option<String>, String)>,
+    cols: Vec<ScopeCol>,
     label: &'static str,
 }
 
@@ -165,7 +182,10 @@ impl Scope {
             cols: schema
                 .columns
                 .iter()
-                .map(|c| (Some(schema.table.clone()), c.name.clone()))
+                .map(|c| ScopeCol {
+                    qualifier: Some(schema.table.clone()),
+                    names: vec![c.name.clone()],
+                })
                 .collect(),
             label: "column",
         }
@@ -179,12 +199,12 @@ impl Scope {
 
     fn resolve(&self, table: Option<&str>, name: &str) -> Result<usize> {
         let mut hit = None;
-        for (i, (qualifier, col)) in self.cols.iter().enumerate() {
-            if !col.eq_ignore_ascii_case(name) {
+        for (i, col) in self.cols.iter().enumerate() {
+            if !col.names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
                 continue;
             }
             if let Some(t) = table {
-                match qualifier {
+                match &col.qualifier {
                     Some(q) if q.eq_ignore_ascii_case(t) => {}
                     _ => continue,
                 }
@@ -203,12 +223,15 @@ impl Scope {
         })
     }
 
-    /// Name-only match, used by `ORDER BY` against the projected output so a key
-    /// written as the whole expression (`COUNT(*)`, `b + 1`) finds its column.
-    fn position_by_name(&self, name: &str) -> Option<usize> {
+    /// First column whose *output* name is `name`. Used by `ORDER BY` against the
+    /// projected output, so a key written as the whole expression (`COUNT(*)`,
+    /// `b + 1`) finds its column and an alias beats a base name. Deliberately
+    /// takes the first match rather than crying ambiguous: `SELECT a, a FROM t
+    /// ORDER BY a` is legal and either column will do.
+    fn position_by_output_name(&self, name: &str) -> Option<usize> {
         self.cols
             .iter()
-            .position(|(_, n)| n.eq_ignore_ascii_case(name))
+            .position(|c| c.names[0].eq_ignore_ascii_case(name))
     }
 }
 
@@ -319,13 +342,13 @@ fn lower_select(select: &SelectStmt, catalog: &Catalog) -> Result<LogicalPlan> {
     let mut items: Vec<(Expr, String)> = Vec::with_capacity(select.projection.len());
     for item in &select.projection {
         match item {
-            SelectItem::Star => items.extend(scope.cols.iter().map(|(q, n)| {
+            SelectItem::Star => items.extend(scope.cols.iter().map(|c| {
                 (
                     Expr::Column {
-                        table: q.clone(),
-                        name: n.clone(),
+                        table: c.qualifier.clone(),
+                        name: c.names[0].clone(),
                     },
-                    n.clone(),
+                    c.names[0].clone(),
                 )
             })),
             SelectItem::Expr { expr, .. } => items.push((
@@ -348,7 +371,10 @@ fn lower_select(select: &SelectStmt, catalog: &Catalog) -> Result<LogicalPlan> {
             // `GROUP BY t.b` is still addressable as `t.b` above the Aggregate.
             keys.push(match (&resolved, key) {
                 (Expr::ColumnRef(i), Expr::Column { .. }) => scope.cols[*i].clone(),
-                _ => (None, key.to_string()),
+                _ => ScopeCol {
+                    qualifier: None,
+                    names: vec![key.to_string()],
+                },
             });
             group_by.push(resolved);
         }
@@ -380,40 +406,89 @@ fn lower_select(select: &SelectStmt, catalog: &Catalog) -> Result<LogicalPlan> {
         (exprs, scope)
     };
 
-    // ORDER BY resolves against the projected output, so build its scope before
-    // `exprs` is moved into the Project.
+    // ORDER BY resolves against the projected output (§6), so build that scope
+    // before `exprs` is moved into the Project. A projected plain column answers
+    // to its output name AND its base name, so all of `ORDER BY id`, `ORDER BY a`
+    // and `ORDER BY t.a` reach `SELECT t.a AS id`.
     let out_scope = Scope {
         cols: exprs
             .iter()
             .zip(&items)
             .map(|((resolved, name), (source, _))| match (resolved, source) {
                 (Expr::ColumnRef(i), Expr::Column { .. }) => {
-                    (project_input.cols[*i].0.clone(), name.clone())
+                    let base = &project_input.cols[*i];
+                    let mut names = vec![name.clone()];
+                    names.extend(
+                        base.names
+                            .iter()
+                            .filter(|n| !n.eq_ignore_ascii_case(name))
+                            .cloned(),
+                    );
+                    ScopeCol {
+                        qualifier: base.qualifier.clone(),
+                        names,
+                    }
                 }
-                _ => (None, name.clone()),
+                _ => ScopeCol {
+                    qualifier: None,
+                    names: vec![name.clone()],
+                },
             })
             .collect(),
         label: "output column",
     };
+
+    // §6 case 3: a key that is not projected at all. It is carried as a hidden
+    // extra column on this Project and trimmed off again above the Sort, so the
+    // output shape is unchanged and the key is present where rows are compared.
+    let visible = exprs.len();
+    let mut exprs = exprs;
+    let mut keys = Vec::with_capacity(select.order_by.len());
+    for (key, descending) in &select.order_by {
+        // Output name first, so an alias beats a base name: `ORDER BY n`,
+        // `ORDER BY COUNT(*)`.
+        let resolved = match out_scope.position_by_output_name(&key.to_string()) {
+            Some(i) => Expr::ColumnRef(i),
+            None => match resolve_expr(key, &out_scope) {
+                Ok(resolved) => resolved,
+                Err(_) => {
+                    // Resolve against the Project's own input instead, and report
+                    // that miss rather than the projected-output one.
+                    exprs.push((resolve_expr(key, &project_input)?, key.to_string()));
+                    Expr::ColumnRef(exprs.len() - 1)
+                }
+            },
+        };
+        keys.push((resolved, *descending));
+    }
+
+    // Built before `exprs` moves; empty unless something hidden was added.
+    let trim: Vec<(Expr, String)> = if exprs.len() > visible {
+        exprs[..visible]
+            .iter()
+            .enumerate()
+            .map(|(i, (_, name))| (Expr::ColumnRef(i), name.clone()))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     plan = LogicalPlan::Project {
         input: Box::new(plan),
         exprs,
     };
 
-    if !select.order_by.is_empty() {
-        let mut keys = Vec::with_capacity(select.order_by.len());
-        for (key, descending) in &select.order_by {
-            // Whole-expression match first: `ORDER BY n`, `ORDER BY COUNT(*)`.
-            let resolved = match out_scope.position_by_name(&key.to_string()) {
-                Some(i) => Expr::ColumnRef(i),
-                None => resolve_expr(key, &out_scope)?,
-            };
-            keys.push((resolved, *descending));
-        }
+    if !keys.is_empty() {
         plan = LogicalPlan::Sort {
             input: Box::new(plan),
             keys,
         };
+        if !trim.is_empty() {
+            plan = LogicalPlan::Project {
+                input: Box::new(plan),
+                exprs: trim,
+            };
+        }
     }
 
     if let Some(n) = select.limit {
@@ -916,16 +991,185 @@ mod tests {
             &[(Expr::ColumnRef(1), true), (Expr::ColumnRef(0), false)]
         );
 
-        // A key that was not projected is an error, not a silent re-scan.
+        // A sort key that names nothing at all is still an error.
         assert!(matches!(
             select(SelectStmt {
                 projection: vec![SelectItem::expr(Expr::col("a"))],
                 from: "t".into(),
-                order_by: vec![(Expr::col("b"), false)],
+                order_by: vec![(Expr::col("nope"), false)],
                 ..Default::default()
             }),
             Err(QuernError::Catalog(_))
         ));
+    }
+
+    /// §6 form 2: the base name of a projected column, even when the projection
+    /// renamed it. Both cases of bead .61.
+    #[test]
+    fn order_by_finds_the_base_name_of_a_renamed_column() {
+        // SELECT a AS id, b AS name FROM t ORDER BY a   (030_select.slt case 4)
+        let aliased = select(SelectStmt {
+            projection: vec![
+                SelectItem::aliased(Expr::col("a"), "id"),
+                SelectItem::aliased(Expr::col("b"), "name"),
+            ],
+            from: "t".into(),
+            order_by: vec![(Expr::col("a"), false)],
+            ..Default::default()
+        })
+        .unwrap();
+        let LogicalPlan::Sort { input, keys } = &aliased else {
+            panic!("expected Sort, got {aliased:?}")
+        };
+        assert_eq!(keys, &[(Expr::ColumnRef(0), false)]);
+        assert!(
+            matches!(&**input, LogicalPlan::Project { exprs, .. } if exprs.len() == 2),
+            "the alias resolved, so nothing was hidden"
+        );
+
+        // The alias itself still wins, and beats a base name (070_order case 9).
+        for key in [Expr::col("id"), Expr::col("a"), Expr::qcol("t", "a")] {
+            let plan = select(SelectStmt {
+                projection: vec![SelectItem::aliased(Expr::col("a"), "id")],
+                from: "t".into(),
+                order_by: vec![(key.clone(), true)],
+                ..Default::default()
+            })
+            .unwrap();
+            let LogicalPlan::Sort { input, keys } = &plan else {
+                panic!("expected Sort for ORDER BY {key}")
+            };
+            assert_eq!(keys, &[(Expr::ColumnRef(0), true)], "ORDER BY {key}");
+            assert!(
+                matches!(&**input, LogicalPlan::Project { exprs, .. } if exprs.len() == 1),
+                "ORDER BY {key} needs no hidden column"
+            );
+        }
+
+        // SELECT t.a, t.b FROM t ORDER BY a   (030_select.slt case 19)
+        let qualified = select(SelectStmt {
+            projection: vec![
+                SelectItem::expr(Expr::qcol("t", "a")),
+                SelectItem::expr(Expr::qcol("t", "b")),
+            ],
+            from: "t".into(),
+            order_by: vec![(Expr::col("a"), false)],
+            ..Default::default()
+        })
+        .unwrap();
+        let LogicalPlan::Sort { keys, .. } = &qualified else {
+            panic!("expected Sort")
+        };
+        assert_eq!(keys, &[(Expr::ColumnRef(0), false)]);
+    }
+
+    /// §6 form 3: a key that is not projected at all rides along as a hidden
+    /// column and a trimming Project drops it, so the output shape is unchanged.
+    /// Bead .62.
+    #[test]
+    fn unprojected_order_by_key_is_hidden_then_trimmed() {
+        // SELECT a + 10 FROM t ORDER BY a   (030_select.slt case 6)
+        let plan = select(SelectStmt {
+            projection: vec![SelectItem::expr(Expr::bin(
+                Expr::col("a"),
+                BinOp::Add,
+                Expr::Literal(Value::Int(10)),
+            ))],
+            from: "t".into(),
+            order_by: vec![(Expr::col("a"), false)],
+            ..Default::default()
+        })
+        .unwrap();
+
+        // Project(trim) -> Sort -> Project(visible + hidden) -> Scan
+        let LogicalPlan::Project { input, exprs } = &plan else {
+            panic!("expected a trimming Project on top, got {plan:?}")
+        };
+        assert_eq!(
+            exprs,
+            &[(Expr::ColumnRef(0), "(a + 10)".to_string())],
+            "one output column, the hidden key dropped"
+        );
+        let LogicalPlan::Sort { input, keys } = &**input else {
+            panic!("expected Sort")
+        };
+        assert_eq!(keys, &[(Expr::ColumnRef(1), false)], "sorts on the extra");
+        let LogicalPlan::Project { input, exprs } = &**input else {
+            panic!("expected Project")
+        };
+        assert_eq!(
+            exprs,
+            &[
+                (
+                    Expr::bin(
+                        Expr::ColumnRef(0),
+                        BinOp::Add,
+                        Expr::Literal(Value::Int(10))
+                    ),
+                    "(a + 10)".to_string()
+                ),
+                (Expr::ColumnRef(0), "a".to_string()),
+            ],
+            "the key is carried as one extra column"
+        );
+        assert!(matches!(**input, LogicalPlan::Scan { .. }));
+
+        // ORDER BY on an expression is the same mechanism, and DESC survives.
+        let expr_key = select(SelectStmt {
+            projection: vec![SelectItem::expr(Expr::col("c"))],
+            from: "t".into(),
+            order_by: vec![(Expr::bin(Expr::col("a"), BinOp::Add, Expr::col("a")), true)],
+            ..Default::default()
+        })
+        .unwrap();
+        let LogicalPlan::Project { input, exprs } = &expr_key else {
+            panic!("expected a trimming Project")
+        };
+        assert_eq!(exprs.len(), 1, "output shape unchanged");
+        let LogicalPlan::Sort { input, keys } = &**input else {
+            panic!("expected Sort")
+        };
+        assert_eq!(keys, &[(Expr::ColumnRef(1), true)]);
+        assert!(
+            matches!(&**input, LogicalPlan::Project { exprs, .. } if exprs.len() == 2),
+            "one hidden column for the whole expression"
+        );
+
+        // No hidden column means NO second Project: an ordered query whose key is
+        // projected keeps the plain Sort-over-Project shape.
+        let plain = select(SelectStmt {
+            projection: vec![SelectItem::expr(Expr::col("a"))],
+            from: "t".into(),
+            order_by: vec![(Expr::col("a"), false)],
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(
+            matches!(&plain, LogicalPlan::Sort { .. }),
+            "no trimming Project when nothing was hidden, got {plain:?}"
+        );
+
+        // LIMIT still sits outermost, above the trim.
+        let limited = select(SelectStmt {
+            projection: vec![SelectItem::expr(Expr::bin(
+                Expr::col("a"),
+                BinOp::Add,
+                Expr::Literal(Value::Int(10)),
+            ))],
+            from: "t".into(),
+            order_by: vec![(Expr::col("a"), false)],
+            limit: Some(2),
+            ..Default::default()
+        })
+        .unwrap();
+        let LogicalPlan::Limit { input, n } = &limited else {
+            panic!("expected Limit outermost")
+        };
+        assert_eq!(*n, 2);
+        assert!(
+            matches!(&**input, LogicalPlan::Project { exprs, .. } if exprs.len() == 1),
+            "LIMIT applies after ORDER BY, above the trim"
+        );
     }
 
     #[test]
