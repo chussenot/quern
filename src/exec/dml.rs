@@ -107,6 +107,16 @@ fn type_check(row: &Row, schema: &Schema) -> Result<()> {
     Ok(())
 }
 
+/// The one duplicate-key message, shared by INSERT and UPDATE so the two read
+/// alike. Storage only knows the key is taken (a bool, from the btree); naming
+/// the column it belongs to needs the schema, which is why this lives here.
+fn duplicate_pk(key: i64, schema: &Schema, column: usize) -> QuernError {
+    QuernError::Type(format!(
+        "duplicate PRIMARY KEY value {key} for {}.{}",
+        schema.table, schema.columns[column].name
+    ))
+}
+
 // --- the three statements ----------------------------------------------------
 
 /// `rows` arrive already normalised to full schema-ordered rows by
@@ -131,18 +141,13 @@ fn insert(
             .collect::<Result<_>>()?;
         type_check(&row, schema)?;
         if let Some(i) = pk {
-            // The storage layer only knows the key is taken (a bool from the
-            // btree); the user-facing message needs the table and column, so it
-            // is built here where the schema is. Rows earlier in this same
-            // statement are not in storage yet, so they are checked separately.
+            // Rows earlier in this same statement are not in storage yet, so
+            // `lookup_pk` cannot see them: they are checked separately.
             if let Value::Int(key) = row[i] {
                 let taken = storage.lookup_pk(table, key)?.is_some()
                     || checked.iter().any(|r| r[i] == Value::Int(key));
                 if taken {
-                    return Err(QuernError::Type(format!(
-                        "duplicate PRIMARY KEY value {key} for {}.{}",
-                        schema.table, schema.columns[i].name
-                    )));
+                    return Err(duplicate_pk(key, schema, i));
                 }
             }
         }
@@ -159,6 +164,12 @@ fn insert(
 
 /// SET expressions are evaluated against the **old** row, so
 /// `UPDATE t SET a = a + 1` sees the pre-update value.
+///
+/// Two phases here too, and for INSERT's reason: an UPDATE that moves a row
+/// onto a PRIMARY KEY another row holds is an error (the btree maps one key to
+/// one RowId, §4), and §4's implicit transaction means the earlier rows of the
+/// same statement must not survive it. So every new row is built and validated
+/// before any is written.
 fn update(
     table: &str,
     sets: &[(String, Expr)],
@@ -177,16 +188,48 @@ fn update(
         })
         .collect::<Result<_>>()?;
 
+    // Only an UPDATE that assigns the PK column can collide; SET on any other
+    // column leaves every key where it was, so it never needs the lookup.
+    let pk = schema
+        .primary_key()
+        .filter(|p| targets.iter().any(|(i, _)| i == p));
+
     let hits = matching(table, predicate, storage)?; // borrow ends here
+    let mut pending: Vec<(RowId, Row)> = Vec::with_capacity(hits.len());
     for (id, old) in &hits {
         let mut new = old.clone();
         for (i, expr) in &targets {
             new[*i] = eval(expr, old)?;
         }
         type_check(&new, schema)?;
-        storage.update(table, *id, &new)?;
+        if let Some(i) = pk {
+            if let Value::Int(key) = new[i] {
+                // A hit on the row being updated is fine — `SET a = a` is a
+                // no-op, not a violation. A hit on any other row is not, and
+                // neither is a clash with a row already validated in this same
+                // statement, which is not written yet for `lookup_pk` to find.
+                //
+                // ponytail: strictly row-at-a-time, so a rotation like
+                // `SET a = a + 1` over {1, 2} is refused even though the final
+                // key set would have been unique. That matches what storage can
+                // actually do (it writes one row at a time and the btree would
+                // reject the intermediate state), so relaxing it means ordering
+                // the writes, not just relaxing the check.
+                let clash = storage
+                    .lookup_pk(table, key)?
+                    .is_some_and(|(other, _)| other != *id)
+                    || pending.iter().any(|(_, r)| r[i] == Value::Int(key));
+                if clash {
+                    return Err(duplicate_pk(key, schema, i));
+                }
+            }
+        }
+        pending.push((*id, new));
     }
-    Ok(hits.len())
+    for (id, row) in &pending {
+        storage.update(table, *id, row)?;
+    }
+    Ok(pending.len())
 }
 
 /// DELETE needs no schema: nothing is written, so nothing is type-checked.
@@ -487,6 +530,79 @@ mod tests {
         };
         assert_eq!(execute(&plan, &mut m, &schema()), Ok(0));
         assert_eq!(m.values(1), vec![txt("one"), txt("two")]);
+    }
+
+    /// `tests/logic/100_update_delete.slt` cases 20 and 21: `UPDATE u SET a = 1
+    /// WHERE a = 2` when row 1 already holds key 1 is an error, and the failed
+    /// statement leaves nothing behind — not even the `b` of the row it matched.
+    #[test]
+    fn update_onto_a_key_another_row_holds_errors_and_lands_nothing() {
+        let mut m = seeded();
+        let plan = LogicalPlan::Update {
+            table: "t".to_string(),
+            sets: vec![("a".to_string(), lit(int(1)))],
+            predicate: Some(a_eq(int(2))),
+        };
+        match execute(&plan, &mut m, &schema()) {
+            Err(QuernError::Type(msg)) => assert!(msg.contains("t.a"), "must name t.a: {msg}"),
+            other => panic!("expected a type error, got {other:?}"),
+        }
+        assert_eq!(m.values(0), vec![int(1), int(2)]);
+        assert_eq!(m.values(1), vec![txt("one"), txt("two")]);
+    }
+
+    /// The same-row hit is not a violation: `lookup_pk` finds the row being
+    /// updated, and that must not be mistaken for another row's key.
+    #[test]
+    fn update_assigning_a_row_its_own_key_succeeds() {
+        let mut m = seeded();
+        let plan = LogicalPlan::Update {
+            table: "t".to_string(),
+            sets: vec![
+                ("a".to_string(), Expr::ColumnRef(0)),
+                ("b".to_string(), lit(txt("w"))),
+            ],
+            predicate: Some(a_eq(int(1))),
+        };
+        assert_eq!(execute(&plan, &mut m, &schema()), Ok(1));
+        assert_eq!(m.values(0), vec![int(1), int(2)]);
+        assert_eq!(m.values(1), vec![txt("w"), txt("two")]);
+    }
+
+    /// Two matched rows given the same new key collide with each other. Neither
+    /// key exists yet, so `lookup_pk` sees nothing and only the pending-row
+    /// check catches it — the UPDATE twin of the multi-row INSERT case.
+    #[test]
+    fn two_rows_colliding_within_one_update_error_and_land_nothing() {
+        let mut m = seeded();
+        let plan = LogicalPlan::Update {
+            table: "t".to_string(),
+            sets: vec![("a".to_string(), lit(int(3)))],
+            predicate: None,
+        };
+        assert!(matches!(
+            execute(&plan, &mut m, &schema()),
+            Err(QuernError::Type(_))
+        ));
+        assert_eq!(m.values(0), vec![int(1), int(2)]);
+    }
+
+    /// A SET that does not touch the PK column never consults the index — the
+    /// no-PK mock would error if it did.
+    #[test]
+    fn an_update_that_leaves_the_key_alone_skips_the_lookup() {
+        let mut s = schema();
+        s.columns[0].primary_key = false;
+        let mut m = Mock::new(None);
+        let seed = ins(vec![vec![lit(int(1)), lit(txt("one"))]]);
+        assert_eq!(execute(&seed, &mut m, &s), Ok(1));
+        let plan = LogicalPlan::Update {
+            table: "t".to_string(),
+            sets: vec![("b".to_string(), lit(txt("w")))],
+            predicate: None,
+        };
+        assert_eq!(execute(&plan, &mut m, &s), Ok(1));
+        assert_eq!(m.values(1), vec![txt("w")]);
     }
 
     #[test]
