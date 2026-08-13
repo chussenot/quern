@@ -1,0 +1,194 @@
+statement ok
+-- 080_limit.slt -- LIMIT corpus (bead bd_30-agents-dwm.32).
+-- Expectations derived from docs/quern.md sec 1 (NULL rule) and sec 5 (the
+-- pinned format). Two format rules drive the shape of this file:
+--   rule 3: zero expected rows is ---- followed by a blank line, and that is
+--           legal -- which is what LIMIT 0 needs.
+--   rule 6: the comparison is ordered iff the two-word sort keyword appears
+--           in the statement TEXT. So a block whose statement has no sort
+--           clause is compared as a sorted multiset, and its comment must
+--           not spell that keyword either -- hence the circumlocution below.
+-- A statement with no sort clause also has no pinned row CHOICE, only a
+-- pinned count, so every unsorted case here either takes every row, takes
+-- none, or projects a column whose value is the same in every row.
+CREATE TABLE lim (a INT PRIMARY KEY, w TEXT);
+
+statement ok
+INSERT INTO lim (a, w) VALUES (1, 'one'), (2, 'two'), (3, 'three'), (4, 'four'), (5, 'five');
+
+statement ok
+CREATE TABLE dup (a INT PRIMARY KEY, s TEXT);
+
+statement ok
+INSERT INTO dup (a, s) VALUES (1, 'same'), (2, 'same'), (3, 'same');
+
+statement ok
+-- Never inserted into: the empty-table cases below.
+CREATE TABLE mt (a INT PRIMARY KEY, w TEXT);
+
+statement ok
+CREATE TABLE lnull (a INT PRIMARY KEY, n INT);
+
+statement ok
+INSERT INTO lnull (a, n) VALUES (1, NULL), (2, 7), (3, NULL), (4, 2);
+
+query
+-- case 1: LIMIT 0, sorted. Zero rows, sec 5 rule 3.
+SELECT a FROM lim ORDER BY a LIMIT 0;
+----
+
+query
+-- case 2: LIMIT 0 with no sort clause. Still zero rows, and the empty
+-- multiset compares equal to the empty expectation.
+SELECT a FROM lim LIMIT 0;
+----
+
+query
+-- case 3: LIMIT smaller than the result -- the first three ascending.
+SELECT a FROM lim ORDER BY a ASC LIMIT 3;
+----
+1
+2
+3
+
+query
+-- case 4: THE case. Sorting happens before truncation, so this is the top
+-- three by a, not three arbitrary rows put in order: 5, 4, 3 -- never
+-- 1, 2, 3 reversed.
+SELECT a FROM lim ORDER BY a DESC LIMIT 3;
+----
+5
+4
+3
+
+query
+-- case 5: LIMIT exactly the result size.
+SELECT a FROM lim ORDER BY a ASC LIMIT 5;
+----
+1
+2
+3
+4
+5
+
+query
+-- case 6: LIMIT larger than the result size -- no error, no padding.
+SELECT a FROM lim ORDER BY a ASC LIMIT 100;
+----
+1
+2
+3
+4
+5
+
+query
+-- case 7: LIMIT 1 over a descending sort is the maximum.
+SELECT a FROM lim ORDER BY a DESC LIMIT 1;
+----
+5
+
+query
+-- case 8: LIMIT 1 over an ascending sort is the minimum.
+SELECT a FROM lim ORDER BY a ASC LIMIT 1;
+----
+1
+
+query
+-- case 9: WHERE, then sort, then truncate -- in that order.
+SELECT a, w FROM lim WHERE a > 2 ORDER BY a DESC LIMIT 2;
+----
+5	five
+4	four
+
+query
+-- case 10: LIMIT over a TEXT sort. Byte order over these lowercase ASCII
+-- values is five, four, one, three, two.
+SELECT w FROM lim ORDER BY w ASC LIMIT 2;
+----
+five
+four
+
+query
+-- case 11: LIMIT over a two-key sort.
+SELECT a, w FROM lim ORDER BY w ASC, a DESC LIMIT 3;
+----
+5	five
+4	four
+1	one
+
+query
+-- case 12: LIMIT over an expression sort. 0 - a ascending is -5, -4, ...
+SELECT a, w FROM lim ORDER BY 0 - a ASC LIMIT 2;
+----
+5	five
+4	four
+
+query
+-- case 13: bound larger than the result, no sort clause. Every row survives,
+-- so the whole multiset is pinned even though the row order is not.
+SELECT a FROM lim LIMIT 10;
+----
+1
+2
+3
+4
+5
+
+query
+-- case 14: bound equal to the result size, no sort clause. Same reasoning.
+SELECT a FROM lim LIMIT 5;
+----
+1
+2
+3
+4
+5
+
+query
+-- case 15: bound smaller than the result, no sort clause. Which rows come
+-- back is not pinned by the spec, so the projected column has the same value
+-- in all three rows: only the COUNT is being asserted here.
+SELECT s FROM dup LIMIT 2;
+----
+same
+same
+
+query
+-- case 16: LIMIT over an empty table, bound above zero. Zero rows, no error.
+SELECT a FROM mt LIMIT 3;
+----
+
+query
+-- case 17: LIMIT 0 over an empty table.
+SELECT a FROM mt ORDER BY a LIMIT 0;
+----
+
+query
+-- case 18: LIMIT with NULLs, ascending. sec 1 sorts NULL last in ASC, so the
+-- two non-NULL rows are the ones that survive the truncation.
+SELECT a, n FROM lnull ORDER BY n ASC, a ASC LIMIT 2;
+----
+4	2
+2	7
+
+query
+-- case 19: LIMIT with NULLs, descending. sec 1 sorts NULL first in DESC, so
+-- now the NULL rows are exactly the ones that survive -- the mirror of case
+-- 18, and the pair that catches a NULL-placement regression. The NULL rows
+-- tie on n, so a ASC pins which order they come out in.
+SELECT a, n FROM lnull ORDER BY n DESC, a ASC LIMIT 2;
+----
+1	NULL
+3	NULL
+
+query
+-- case 20: LIMIT larger than the result after a WHERE narrows it.
+SELECT a, n FROM lnull WHERE n > 1 ORDER BY n DESC LIMIT 9;
+----
+2	7
+4	2
+
+statement error
+-- case 21: LogicalPlan::Limit carries a usize, so a negative bound cannot be
+-- represented and must be an Err rather than a panic (sec 1).
+SELECT a FROM lim ORDER BY a LIMIT -1;
