@@ -1,0 +1,229 @@
+# 040_where.slt — WHERE predicates, boolean operators, precedence, NULL.
+#
+# Derived from docs/quern.md §1 and §5. Self-contained: its own tables, no
+# dependency on 030_select.slt.
+#
+# The load-bearing rule here is §1's: a WHERE clause keeps a row only when the
+# predicate is exactly Bool(true). Combined with "any comparison with NULL
+# yields NULL", that makes every NULL comparison drop its row — including
+# under NOT, which is the case implementations get wrong by reading = NULL as
+# IS NULL.
+#
+# Two tables:
+#   w — no NULLs, five rows, exercises the operators and precedence
+#   v — one all-NULL row, exercises the NULL rule
+
+statement ok
+CREATE TABLE w (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+statement ok
+INSERT INTO w VALUES (1, 'ant', TRUE), (2, 'bee', FALSE), (3, 'cow', TRUE), (4, 'dog', FALSE), (5, 'elk', TRUE);
+
+statement ok
+CREATE TABLE v (id INT PRIMARY KEY, k INT, g BOOL, t TEXT);
+
+statement ok
+INSERT INTO v (id, k, g, t) VALUES (1, 5, TRUE, 'p'), (2, NULL, NULL, NULL), (3, 9, FALSE, 'q');
+
+# 1. > on INT
+query
+SELECT a, b FROM w WHERE a > 3 ORDER BY a;
+----
+4	dog
+5	elk
+
+# 2. = on INT
+query
+SELECT a, b, c FROM w WHERE a = 3;
+----
+3	cow	TRUE
+
+# 3. <> on INT, no ORDER BY (unordered multiset)
+query
+SELECT a FROM w WHERE a <> 3;
+----
+1
+2
+4
+5
+
+# 4. < on INT
+query
+SELECT a FROM w WHERE a < 3 ORDER BY a;
+----
+1
+2
+
+# 5. = on TEXT
+query
+SELECT a, b FROM w WHERE b = 'cow';
+----
+3	cow
+
+# 6. <> on TEXT, unordered
+query
+SELECT b FROM w WHERE b <> 'ant';
+----
+bee
+cow
+dog
+elk
+
+# 7. > on TEXT
+query
+SELECT b FROM w WHERE b > 'cow' ORDER BY b;
+----
+dog
+elk
+
+# 8. = on BOOL
+query
+SELECT a FROM w WHERE c = TRUE ORDER BY a;
+----
+1
+3
+5
+
+# 9. a bare BOOL column is already a predicate
+query
+SELECT a FROM w WHERE c ORDER BY a;
+----
+1
+3
+5
+
+# 10. NOT
+query
+SELECT a FROM w WHERE NOT c ORDER BY a;
+----
+2
+4
+
+# 11. AND
+query
+SELECT a FROM w WHERE a > 1 AND c ORDER BY a;
+----
+3
+5
+
+# 12. OR
+query
+SELECT a FROM w WHERE a = 1 OR a = 4 ORDER BY a;
+----
+1
+4
+
+# 13. precedence: NOT binds tighter than AND, so this is (NOT c) AND a > 2.
+# Reading it as NOT (c AND a > 2) would return 1, 2 and 4 instead.
+query
+SELECT a FROM w WHERE NOT c AND a > 2 ORDER BY a;
+----
+4
+
+# 14. precedence: AND binds tighter than OR, so this is a = 1 OR (c AND a > 4).
+# Reading it as (a = 1 OR c) AND a > 4 would return 5 alone.
+query
+SELECT a FROM w WHERE a = 1 OR c AND a > 4 ORDER BY a;
+----
+1
+5
+
+# 15. parentheses override that: now it IS (a = 1 OR c) AND a > 4
+query
+SELECT a FROM w WHERE (a = 1 OR c) AND a > 4 ORDER BY a;
+----
+5
+
+# 16. parentheses under NOT: NOT (c OR a = 2)
+query
+SELECT a FROM w WHERE NOT (c OR a = 2) ORDER BY a;
+----
+4
+
+# 17. arithmetic inside a predicate; * binds tighter than =
+query
+SELECT a FROM w WHERE a * 2 = 6;
+----
+3
+
+# 18. an expression on both sides of the comparison (2a > a + 3, i.e. a > 3)
+query
+SELECT a FROM w WHERE a * 2 > a + 3 ORDER BY a;
+----
+4
+5
+
+# 19. zero matching rows — ---- followed by a blank line, and legal (§5 rule 3)
+query
+SELECT a FROM w WHERE a > 100;
+----
+
+# 20. = NULL yields NULL, and WHERE keeps only exactly TRUE, so zero rows.
+# It does NOT mean IS NULL: row 2 has k NULL and is still dropped.
+query
+SELECT id FROM v WHERE k = NULL;
+----
+
+# 21. <> NULL is NULL too — the negated form does not resurrect the row
+query
+SELECT id FROM v WHERE k <> NULL;
+----
+
+# 22. NOT (k = NULL) is not TRUE for any row either, so still zero rows
+query
+SELECT id FROM v WHERE NOT (k = NULL);
+----
+
+# 23. and neither branch of an OR of two NULL comparisons is TRUE
+query
+SELECT id FROM v WHERE k = NULL OR k <> NULL;
+----
+
+# 24. an ordinary comparison silently drops the NULL row
+query
+SELECT id, k FROM v WHERE k > 1 ORDER BY id;
+----
+1	5
+3	9
+
+# 25. arithmetic with NULL yields NULL, so the predicate is not TRUE
+query
+SELECT id FROM v WHERE k + 1 = 6;
+----
+1
+
+# 26. a NULL BOOL column used bare as a predicate is not TRUE
+query
+SELECT id FROM v WHERE g;
+----
+1
+
+# 27. NOT over that NULL is still not TRUE — only the FALSE row survives
+query
+SELECT id FROM v WHERE NOT g;
+----
+3
+
+# 28. the same on TEXT: <> 'p' is NULL for the NULL row
+query
+SELECT id, t FROM v WHERE t <> 'p';
+----
+3	q
+
+# 29. AND with a NULL operand keeps nothing extra
+query
+SELECT id FROM v WHERE k > 1 AND id < 3;
+----
+1
+
+# 30. divide-by-zero in a predicate is an error, like anywhere else
+statement error
+SELECT a FROM w WHERE a / 0 = 1;
+
+# 31. comparing INT to TEXT is a type mismatch, not FALSE
+statement error
+SELECT a FROM w WHERE a = 'ant';
+
+# 32. unknown column in a predicate
+statement error
+SELECT a FROM w WHERE zz > 1;

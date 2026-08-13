@@ -1,0 +1,240 @@
+# 030_select.slt — projection, aliases and expressions.
+#
+# Derived from docs/quern.md §1 (SQL surface, operators, NULL rule) and §5
+# (the pinned .slt format). Self-contained: every table used here is created
+# here. Lines outside a directive block are comments (#) or blank.
+#
+# Two tables:
+#   s — no NULLs, exercises projection and arithmetic
+#   x — one NULL INT and one '' TEXT, exercises the NULL rule and format rule 4
+#
+# Format rule 4 (no expected row may render as an entirely empty line) is why
+# case 20 selects id and k alongside t.
+
+statement ok
+CREATE TABLE s (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+statement ok
+INSERT INTO s VALUES (1, 'alpha', TRUE), (2, 'beta', FALSE), (3, 'gamma', TRUE);
+
+statement ok
+CREATE TABLE x (id INT PRIMARY KEY, k INT, t TEXT);
+
+statement ok
+INSERT INTO x (id, k, t) VALUES (1, 10, 'a'), (2, NULL, 'b'), (3, 4, '');
+
+# 1. star projection, in schema order
+query
+SELECT * FROM s ORDER BY a;
+----
+1	alpha	TRUE
+2	beta	FALSE
+3	gamma	TRUE
+
+# 2. explicit projection: a subset, reordered
+query
+SELECT b, a FROM s ORDER BY a;
+----
+alpha	1
+beta	2
+gamma	3
+
+# 3. the same column twice
+query
+SELECT a, a FROM s ORDER BY a;
+----
+1	1
+2	2
+3	3
+
+# 4. AS aliases — §5 compares no headers, so this asserts the values survive
+query
+SELECT a AS id, b AS name FROM s ORDER BY a;
+----
+1	alpha
+2	beta
+3	gamma
+
+# 5. an aliased expression
+query
+SELECT a, a + 1 AS n FROM s ORDER BY a;
+----
+1	2
+2	3
+3	4
+
+# 6. addition against a literal
+query
+SELECT a + 10 FROM s ORDER BY a;
+----
+11
+12
+13
+
+# 7. subtraction crossing zero
+query
+SELECT a, a - 5 FROM s ORDER BY a;
+----
+1	-4
+2	-3
+3	-2
+
+# 8. multiplication
+query
+SELECT a * 3 FROM s ORDER BY a;
+----
+3
+6
+9
+
+# 9. integer division truncates towards zero (7/2 = 3, 7/3 = 2)
+query
+SELECT a, 7 / a FROM s ORDER BY a;
+----
+1	7
+2	3
+3	2
+
+# 10. integer division truncating to zero, not to a fraction
+query
+SELECT a / 4 FROM s ORDER BY a;
+----
+0
+0
+0
+
+# 11. precedence: * binds tighter than + (left-to-right would give 9)
+query
+SELECT 1 + 2 * 3 FROM s WHERE a = 1;
+----
+7
+
+# 12. parentheses override that precedence
+query
+SELECT (1 + 2) * 3 FROM s WHERE a = 1;
+----
+9
+
+# 13. bare literals of all three types in the select list
+query
+SELECT 42, 'lit', TRUE FROM s WHERE a = 2;
+----
+42	lit	TRUE
+
+# 14. NOT applied to a comparison, projected as BOOL
+query
+SELECT a, NOT (a = 1) FROM s ORDER BY a;
+----
+1	FALSE
+2	TRUE
+3	TRUE
+
+# 15. comparison on TEXT, projected
+query
+SELECT a, b < 'beta' FROM s ORDER BY a;
+----
+1	TRUE
+2	FALSE
+3	FALSE
+
+# 16. comparison on BOOL, projected
+query
+SELECT a, c = TRUE FROM s ORDER BY a;
+----
+1	TRUE
+2	FALSE
+3	TRUE
+
+# 17. no ORDER BY: unordered multiset, duplicates must match in count
+# (§5 rule 5 sorts both sides by str byte order, so FALSE precedes TRUE)
+query
+SELECT c FROM s;
+----
+FALSE
+TRUE
+TRUE
+
+# 18. no ORDER BY, several columns: byte order over the tab-joined rows
+query
+SELECT a, b FROM s;
+----
+1	alpha
+2	beta
+3	gamma
+
+# 19. table-qualified column reference outside a join
+query
+SELECT s.a, s.b FROM s ORDER BY a;
+----
+1	alpha
+2	beta
+3	gamma
+
+# 20. rendering: '' is an empty field and NULL prints NULL. Both are selected
+# with neighbours so no row renders as an empty line (§5 rule 4).
+query
+SELECT id, t, k FROM x ORDER BY id;
+----
+1	a	10
+2	b	NULL
+3		4
+
+# 21. NULL rule: arithmetic with NULL yields NULL
+query
+SELECT id, k + 1 FROM x ORDER BY id;
+----
+1	11
+2	NULL
+3	5
+
+# 22. NULL is not absorbed by a zero multiplicand
+query
+SELECT id, k * 0 FROM x ORDER BY id;
+----
+1	0
+2	NULL
+3	0
+
+# 23. NULL rule: comparison with NULL yields NULL, not FALSE
+query
+SELECT id, k > 5 FROM x ORDER BY id;
+----
+1	TRUE
+2	NULL
+3	FALSE
+
+# 24. = NULL is NULL for every row, including the NULL one
+query
+SELECT id, k = NULL FROM x ORDER BY id;
+----
+1	NULL
+2	NULL
+3	NULL
+
+# 25. the pinned asymmetry: NULL is checked before divide-by-zero, so NULL / 0
+# is NULL and must NOT error. The WHERE keeps only the NULL row, so the
+# division is evaluated on nothing else.
+query
+SELECT id, k / 0 FROM x WHERE id = 2;
+----
+2	NULL
+
+# 26. divide-by-zero on a non-NULL operand is an error, not NULL
+statement error
+SELECT a / 0 FROM s;
+
+# 27. the same when the zero divisor is computed
+statement error
+SELECT a / (a - a) FROM s;
+
+# 28. arithmetic is INT-only: TEXT + INT is a type mismatch
+statement error
+SELECT b + 1 FROM s;
+
+# 29. unknown column
+statement error
+SELECT zz FROM s;
+
+# 30. unknown table
+statement error
+SELECT a FROM nosuch;
