@@ -315,6 +315,31 @@ fails inside an open transaction leaves the transaction open and discards
 only its own partial work — statements are atomic, transactions are not
 abandoned by one error.
 
+**`ORDER BY` name resolution.** A sort key may name any of three things,
+and all three must work:
+
+1. a projection **alias** — `SELECT a AS id FROM t ORDER BY id`;
+2. the **base name** of a projected column, even when the projection
+   renamed it — `SELECT a AS id FROM t ORDER BY a`, and likewise
+   `SELECT t.a FROM t ORDER BY a` and `ORDER BY t.a`;
+3. a column of the input that is **not projected at all** —
+   `SELECT a + 10 FROM t ORDER BY a`.
+
+Case 3 is the one that costs something. `Sort` sits above `Project` so
+that case 1 resolves, which means an unprojected key is not in the row
+Sort sees. The planner therefore adds the missing key columns to the
+`Project` beneath `Sort` as hidden extras, and puts a second trimming
+`Project` above `Sort` to drop them again — so the output shape is
+unchanged and the key is still available where the comparison happens.
+Ordering by an expression (`ORDER BY a + b`) is the same mechanism.
+
+This paragraph exists because it was missing. Bead .49 asked exactly this
+question and was closed claiming it had been pinned here, when it had not
+been; `tests/logic_runner.rs` then failed three corpus cases and its
+author checked the git history rather than taking the close reason at its
+word. Five cases in `030_select.slt` were graded against a rule that
+lived only in a doc comment.
+
 **`.slt` comments.** A line whose first character is `#` is a comment and
 is skipped by the runner. Comments appear only *between* blocks, never
 inside one — a comment inside a block would be part of the statement text
