@@ -271,6 +271,55 @@ feeds it `BEGIN` plus mutations, `kill -9`s it before `COMMIT`, reopens
 the database and asserts the uncommitted work is absent; then repeats
 with a `COMMIT` before the kill and asserts the work is present.
 
+## 6. Pinned semantics
+
+Everything here was found missing by an agent that refused to guess and
+filed a bead instead. Each is now normative.
+
+**Empty aggregates.** `SUM`, `MIN`, `MAX` and `AVG` over zero surviving
+non-`Null` inputs all return `Null` — not `0`, and `AVG` in particular
+never divides by zero. This covers both a group whose every value is
+`Null` and the no-`GROUP BY` single group over an empty table.
+`COUNT(*)` still counts rows (`0` on an empty table); `COUNT(col)` counts
+non-`Null` values.
+
+**`NULL` as a GROUP BY key.** `Null` is a legal group key and all
+`Null`-keyed rows collapse into **one** group, which prints as `NULL`.
+Grouping is defined by the total order `Value` derives, not by the `=`
+operator, so §1's "any comparison with `Null` yields `Null`" does not
+apply to grouping. A `Null` in a JOIN key is the opposite case and needs
+no special rule: `ON` is a comparison, and §1 keeps a row only when the
+predicate is exactly `Bool(true)`, so a `Null` join key matches nothing.
+
+**BOOL ordering.** `FALSE` sorts before `TRUE`. So `FALSE` comes first in
+`ASC` and `TRUE` first in `DESC`, and the same order governs `MIN`/`MAX`
+over a BOOL column.
+
+**Partial INSERT column lists.** A named `INSERT` may omit columns; each
+omitted column is filled with `Null`. Omitting a `PRIMARY KEY` column is
+`QuernError::Catalog`, as is an unknown or repeated column name. A
+positional `INSERT` whose arity does not match the schema is
+`QuernError::Type`. The permutation into schema order happens in
+`plan/logical.rs`, so no operator sees a column list.
+
+**DDL is not transactional.** `CREATE TABLE` and `DROP TABLE` take effect
+immediately and are **not** undone by `ROLLBACK`. The catalog lives in the
+page-0 header rather than the WAL, and giving it transactional semantics
+would mean a second recovery mechanism for no benefit at this scale. A
+`ROLLBACK` after a `CREATE TABLE` therefore leaves the table in place and
+discards only the row mutations.
+
+**Transaction edges.** `BEGIN` inside an open transaction, and `COMMIT`
+or `ROLLBACK` with none open, are all `QuernError::Txn`. A statement that
+fails inside an open transaction leaves the transaction open and discards
+only its own partial work — statements are atomic, transactions are not
+abandoned by one error.
+
+**`.slt` comments.** A line whose first character is `#` is a comment and
+is skipped by the runner. Comments appear only *between* blocks, never
+inside one — a comment inside a block would be part of the statement text
+that §5 rule 6 scans for `ORDER BY`.
+
 **House rules.** `cargo clippy --all-targets -- -D warnings` clean,
 `cargo fmt --check` clean, `#![forbid(unsafe_code)]` in `lib.rs` — the
 pager may carry one `unsafe` block if and only if a comment names the
