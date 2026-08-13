@@ -11,3 +11,10 @@
 .pact/*
 !.pact/events.jsonl
 !.pact/messages.jsonl
+
+# per-agent worktrees (run 5 topology)
+wt/
+
+# rust build artifacts
+/target
+Cargo.lock
