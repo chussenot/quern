@@ -44,6 +44,17 @@ last in `ASC`, first in `DESC`. Aggregates skip `Null` inputs except
 `COUNT(*)`, which counts rows. This rule is normative — do not invent
 three-valued-logic refinements beyond it.
 
+`AND`, `OR` and `NOT` follow the same absorption rule: **any `Null`
+operand yields `Null`**, with no short-circuit and no SQL three-valued
+logic. So `TRUE OR NULL` is `NULL`, not `TRUE`, and `FALSE AND NULL` is
+`NULL`, not `FALSE`. Real SQL disagrees on both; quern is deliberately
+simpler, and because `WHERE` keeps only `Bool(true)`, the difference is
+invisible except to a query that projects the boolean. Both operands are
+always evaluated, so `FALSE AND 1/0` is a divide-by-zero error.
+
+Integer division truncates toward zero (Rust's `/`), so `-7/2` is `-3`.
+`i64::MIN / -1` overflows and is an `Err`, never a panic.
+
 **Errors** are values, not panics. Every fallible path returns
 `Result<T, QuernError>`. A parse failure, an unknown table, a type
 mismatch, a divide-by-zero: all are `Err`, all are reported by the REPL
