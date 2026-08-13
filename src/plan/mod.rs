@@ -296,9 +296,11 @@ mod tests {
         t.run("CREATE TABLE n (a INT PRIMARY KEY, b INT)");
         t.count("INSERT INTO n VALUES (1, 10), (2, 20), (3, 30)");
         assert_eq!(t.count("UPDATE n SET b = b + 1 WHERE a > 1"), 2);
-        // `ORDER BY` resolves against the PROJECTED row (Sort is above
-        // Project), so an ordering key has to be projected — `SELECT b .. ORDER
-        // BY a` is a deliberate Err(Catalog), not a re-scan.
+        // `ORDER BY` resolves per docs/quern.md §6: an alias, the base name of
+        // a projected column, or a column that is not projected at all. The
+        // last case makes the planner add the key to the Project below Sort and
+        // trim it with a second Project above, so `SELECT b .. ORDER BY a`
+        // returns one column ordered by the unprojected `a`.
         assert_eq!(
             t.rows("SELECT a, b FROM n ORDER BY a"),
             vec![
@@ -307,10 +309,10 @@ mod tests {
                 vec![int(3), int(31)],
             ]
         );
-        assert!(matches!(
-            t.err("SELECT b FROM n ORDER BY a"),
-            QuernError::Catalog(_)
-        ));
+        assert_eq!(
+            t.rows("SELECT b FROM n ORDER BY a"),
+            vec![vec![int(10)], vec![int(21)], vec![int(31)]]
+        );
         assert_eq!(t.count("DELETE FROM n WHERE b = 21"), 1);
         assert_eq!(t.count("DELETE FROM n WHERE b = 999"), 0);
         assert_eq!(
