@@ -126,7 +126,7 @@ bd prime                # Refresh Beads context
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
 <!-- END BEADS CODEX SETUP -->
 
-<!-- pact:begin hash:97b43b5d -->
+<!-- pact:begin hash:19775bc9 -->
 ## pact coordination protocol
 
 pact coordinates multiple coding agents working in this repository. Follow
@@ -136,14 +136,13 @@ this protocol whenever you touch shared files or hand off work to others.
   variable (or `--agent <name>`). Set one before running pact commands; pact
   never guesses an identity. `pact whoami` shows the identity and paths it
   resolved.
-- **Also export `BEADS_ACTOR=$PACT_AGENT`, once, in the same shell.** pact's
-  own `--actor=<agent>` attribution only covers bd calls pact itself makes —
-  it never reaches `bd ready`/`bd update --claim`/`bd close`, which you run
-  directly. Without this, every one of those commands falls through to bd's
-  own next attribution tier — your shared checkout's `git user.name` — so a
-  15-agent fleet's entire task-tracking history can attribute to one identity
-  while `.pact/events.jsonl` correctly shows sixteen. `pact whoami` prints the
-  exact line to run.
+- **Also export `BEADS_ACTOR=$PACT_AGENT`, once, in the same shell.** pact
+  writes nothing to bd, so nothing pact runs can attribute your task tracking
+  for you: `bd ready`/`bd update --claim`/`bd close` are yours alone. Without
+  this they fall through to bd's next attribution tier — your shared checkout's
+  `git user.name` — so a 15-agent fleet's entire task-tracking history can
+  attribute to one identity while `.pact/events.jsonl` correctly shows sixteen.
+  `pact whoami` prints the exact line to run.
 - **Announce intent before you research, not just before you write.** Your
   first pact commands come *before* you read the first file: `pact msg inbox`
   and `pact lease ls` to see what is already claimed and by whom, then
@@ -166,10 +165,11 @@ this protocol whenever you touch shared files or hand off work to others.
   unread for 38 minutes in the middle of it.
 - **Lease anything you WRITE, not just files you edit.** A lease is on a path,
   so a directory of shared state is leasable too — `pact lease acquire .beads/
-  --note "probing the br CLI"` before you run a tool that might write there.
-  An agent that had correctly leased both source files it edited still
-  corrupted the shared Beads store, because it read the protocol as being about
-  editing files and a CLI wrote a second database behind it at exit 0.
+  --note "running bd against the shared store"` before you run a tool that might
+  write there. An agent that had correctly leased both source files it edited
+  still corrupted the shared Beads store, because it read the protocol as being
+  about editing files and a CLI wrote a second database behind it at exit 0.
+  pact itself never writes to `.beads/`; the commands you run directly do.
 - **Ownership, and its one carve-out, stated together**: lease every file you
   edit that another agent might also touch, and release it when done. The
   single exception is a file that is yours alone by assignment (your own
@@ -201,6 +201,13 @@ this protocol whenever you touch shared files or hand off work to others.
   resolved to has exited. So when you are handing off work, address the FILE.
   And read what `pact lease acquire` tells you before you edit: a message
   waiting on a path is usually the reason the last agent stopped.
+- **On exit 2, use the number in the refusal — do not poll.** The refusal tells you
+  how long the holder has left. Wait on THAT order of magnitude, or better, take the
+  advice pact prints with it: subscribe with `pact watch add <path>` and pick up
+  other ready work, and the next release will tell you. Measured on one fleet: an
+  agent retried every 15 seconds, 33 times, against a median 355 seconds of
+  remaining hold whose note said it would renew — and 24 refusals in that run came
+  from agents that had ALREADY subscribed and polled anyway.
 - **A path someone else holds exits 2** — branch on that, not on the message
   text. `pact lease ls` names the holder; message them and pick up something
   else, which is what announcing early bought you. `pact lease acquire --steal`
@@ -246,15 +253,25 @@ this protocol whenever you touch shared files or hand off work to others.
 - **Orient with `pact log`**: one chronological feed of who leased what and
   who said what. Read it when you join, and when you need to know whether a
   peer is still moving.
-- **Commit `.pact/events.jsonl` when you commit your work.** It is the
-  append-only record behind `pact log`, it is the one thing under `.pact/` that
-  is NOT gitignored, and it is the only thing pact stores that it cannot derive
-  from anything else. `.pact/leases/` and `.pact/waits/` stay local — those are
-  live runtime state and committing them would have you fighting over peers'
-  in-flight claims. Fold the log into the commit whose work produced the events;
-  a missed one is self-healing on the next commit. Left uncommitted, every clone
-  of this repo starts with no coordination history at all, and nobody can ask
-  afterwards who held what or whether two agents ever held one path at once.
+- **Commit `.pact/events.jsonl` AND `.pact/messages.jsonl` when you commit your
+  work.** They are the two things pact stores that it cannot derive from anything
+  else: who held what, and what agents said to each other. `.pact/leases/`,
+  `.pact/waits/` and `.pact/read/` stay local — live runtime state and per-machine
+  read positions, and committing those would have you fighting over peers'
+  in-flight claims and inboxes. Fold both into the commit whose work produced
+  them; a missed one is self-healing on the next commit. Left uncommitted, every
+  clone of this repo starts with no coordination history at all, and nobody can ask
+  afterwards who held what, who was warned about it, or whether two agents ever
+  held one path at once.
+- **Sign your commits with your agent name**: `git commit --trailer
+  Pact-Agent=$PACT_AGENT`. Every agent in a fleet commits under the same git
+  identity, so `git log` cannot say which of you made a change — and without
+  that, `pact audit --check commit-correlation` can only ask whether ANYONE held
+  a path when a commit landed, never whether the agent that made it did. Measured:
+  one agent working with no leases at all had its worst commit (five files, all of
+  them leased by compliant peers at that moment) pass the check clean, because a
+  hold existed. The better everyone else behaves, the better an unleased commit
+  hides. One flag makes it visible.
 - **Everything is scriptable**: every pact command accepts `--json` for
   machine-readable output; prefer it over parsing human-formatted text.
 
