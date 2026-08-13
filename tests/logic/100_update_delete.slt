@@ -1,0 +1,265 @@
+# 100_update_delete.slt — UPDATE and DELETE, including how many rows they touch.
+#
+# Every expected value here is derived from docs/quern.md:
+#   §1  the SQL surface (UPDATE with a SET list, DELETE, the comparison
+#       operators) and the NULL rule: any comparison with Null yields Null, and
+#       a WHERE clause keeps a row only when the predicate is exactly
+#       Value::Bool(true). So `= NULL` and `<> NULL` match nothing, ever —
+#       not even a row whose column really is NULL. NULL sorts last in ASC.
+#   §3  LogicalPlan::Update { sets, predicate: Option<Expr> } and
+#       LogicalPlan::Delete { predicate: Option<Expr> } — predicate None is the
+#       no-WHERE form, so UPDATE/DELETE without WHERE hit every row.
+#   §4  Statements outside an explicit transaction run in an implicit one that
+#       commits on success — hence a failing statement leaves no partial work.
+#   §5  "Asserting affected rows": no directive carries a row count and none is
+#       being added, so every affected-row claim below is asserted indirectly,
+#       by a following query over the survivors. Zero rows affected shows up as
+#       a survivor set identical to the one before.
+#
+# The file is self-contained: the runner gives it a fresh temp database.
+
+# case 1: the fixture table.
+statement ok
+CREATE TABLE u (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+# case 2: four rows in one statement.
+statement ok
+INSERT INTO u (a, b, c) VALUES (1, 'a', TRUE), (2, 'b', FALSE), (3, 'c', TRUE), (4, 'd', FALSE);
+
+# case 3: the baseline every later assertion is measured against.
+query
+SELECT a, b, c FROM u ORDER BY a;
+----
+1	a	TRUE
+2	b	FALSE
+3	c	TRUE
+4	d	FALSE
+
+# case 4: UPDATE with a WHERE that matches exactly one row.
+statement ok
+UPDATE u SET b = 'bb' WHERE a = 2;
+
+# case 5: one row changed and only that one — the indirect form of
+# "1 row affected".
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	a
+2	bb
+3	c
+4	d
+
+# case 6: UPDATE whose WHERE matches nothing. Still `statement ok`: touching no
+# rows is success, not an error.
+statement ok
+UPDATE u SET b = 'nope' WHERE a = 99;
+
+# case 7: nothing changed — the indirect form of "0 rows affected".
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	a
+2	bb
+3	c
+4	d
+
+# case 8: several columns in one SET list (the §1 example shape).
+statement ok
+UPDATE u SET b = 'w', c = FALSE WHERE a = 3;
+
+# case 9: both columns of row 3 moved, in one statement, and no other row did.
+query
+SELECT a, b, c FROM u ORDER BY a;
+----
+1	a	TRUE
+2	bb	FALSE
+3	w	FALSE
+4	d	FALSE
+
+# case 10: setting a column to NULL.
+statement ok
+UPDATE u SET b = NULL WHERE a = 4;
+
+# case 11: NULL renders as the literal text NULL (§5).
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	a
+2	bb
+3	w
+4	NULL
+
+# case 12: `b = NULL` yields Null for every row, including row 4 whose b really
+# is NULL, and Null is not Bool(true) — so it keeps nothing. Zero expected rows
+# (§5 rule 3).
+query
+SELECT a, b FROM u WHERE b = NULL;
+----
+
+# case 13: `<> NULL` is Null too, not the complement of case 12. Also zero rows.
+query
+SELECT a, b FROM u WHERE b <> NULL;
+----
+
+# case 14: an UPDATE with a NULL-comparing WHERE therefore updates nothing.
+statement ok
+UPDATE u SET c = TRUE WHERE b = NULL;
+
+# case 15: rows 2, 3 and 4 are still FALSE — if `b = NULL` had matched row 4,
+# its c would read TRUE here.
+query
+SELECT a, c FROM u ORDER BY a;
+----
+1	TRUE
+2	FALSE
+3	FALSE
+4	FALSE
+
+# case 16: same rule for DELETE — `a = NULL` deletes nothing.
+statement ok
+DELETE FROM u WHERE a = NULL;
+
+# case 17: all four rows survive.
+query
+SELECT a FROM u ORDER BY a;
+----
+1
+2
+3
+4
+
+# case 18: and `b = NULL` deletes nothing either, even though row 4 holds NULL.
+statement ok
+DELETE FROM u WHERE b = NULL;
+
+# case 19: still all four, row 4 included.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	a
+2	bb
+3	w
+4	NULL
+
+# case 20: an UPDATE that would give row 2 the primary key row 1 already holds.
+# PRIMARY KEY is unique (§4's B-tree maps key -> RowId, one entry per key), so
+# this is an error, not a silent overwrite.
+statement error
+UPDATE u SET a = 1 WHERE a = 2;
+
+# case 21: the failed statement's implicit transaction did not commit, so no
+# partial work is visible: row 2 still has a = 2 and its b is untouched.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	a
+2	bb
+3	w
+4	NULL
+
+# case 22: assigning TEXT to an INT column is a type mismatch — an Err, not a
+# panic (§1).
+statement error
+UPDATE u SET a = 'x' WHERE a = 1;
+
+# case 23: UPDATE of an unknown table is a catalog error.
+statement error
+UPDATE nosuch SET b = 'q' WHERE b = 'q';
+
+# case 24: DELETE from an unknown table likewise.
+statement error
+DELETE FROM nosuch WHERE b = 'q';
+
+# case 25: UPDATE with no WHERE clause — every row.
+statement ok
+UPDATE u SET c = TRUE;
+
+# case 26: all four, the indirect form of "4 rows affected".
+query
+SELECT a, c FROM u ORDER BY a;
+----
+1	TRUE
+2	TRUE
+3	TRUE
+4	TRUE
+
+# case 27: move row 1's b from the first sort position to the last non-NULL one.
+statement ok
+UPDATE u SET b = 'zzz' WHERE a = 1;
+
+# case 28: the updated values sort in their new positions, and NULL sorts last
+# in ASC (§1). Row 1 was first by b before case 27; it is now third.
+query
+SELECT b, a FROM u ORDER BY b;
+----
+bb	2
+w	3
+zzz	1
+NULL	4
+
+# case 29: DELETE with a WHERE that matches one row.
+statement ok
+DELETE FROM u WHERE a = 2;
+
+# case 30: delete-then-select — row 2 is gone, the other three are not.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	zzz
+3	w
+4	NULL
+
+# case 31: DELETE whose WHERE matches nothing is success.
+statement ok
+DELETE FROM u WHERE a = 99;
+
+# case 32: and deleted nothing.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	zzz
+3	w
+4	NULL
+
+# case 33: DELETE with a range predicate — two of the three rows.
+statement ok
+DELETE FROM u WHERE a > 1;
+
+# case 34: only row 1 survives.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+1	zzz
+
+# case 35: DELETE with no WHERE clause — every remaining row.
+statement ok
+DELETE FROM u;
+
+# case 36: delete-all-then-select, the zero-expected-row form (§5 rule 3).
+query
+SELECT a, b FROM u ORDER BY a;
+----
+
+# case 37: UPDATE over an empty table is success and affects nothing.
+statement ok
+UPDATE u SET b = 'q';
+
+# case 38: still empty.
+query
+SELECT a, b FROM u ORDER BY a;
+----
+
+# case 39: DELETE over an empty table is success too.
+statement ok
+DELETE FROM u;
+
+# case 40: a deleted primary key is free again — the B-tree entry went with the
+# row.
+statement ok
+INSERT INTO u VALUES (2, 'again', FALSE);
+
+# case 41: and that is the only row in the table.
+query
+SELECT a, b, c FROM u ORDER BY a;
+----
+2	again	FALSE

@@ -1,0 +1,220 @@
+# 090_txn.slt — BEGIN / COMMIT / ROLLBACK and the implicit transaction.
+#
+# Every expected value here is derived from docs/quern.md:
+#   §1  the SQL surface (BEGIN/COMMIT/ROLLBACK are statements), the NULL rule,
+#       and "errors are values, not panics" — every failure below is an Err
+#       reported by the .slt runner as a statement error, never a panic.
+#   §4  Single writer: txn.rs holds Option<TxnId>; BEGIN inside a transaction
+#       is an error; statements outside an explicit transaction run in an
+#       implicit one that commits on success. The WAL is REDO-only and replays
+#       only txns with a commit record, which is why ROLLBACK and crash
+#       recovery are the same mechanism: uncommitted work is never replayed.
+#   §5  the pinned format. Lines starting '#' are outside every block and so
+#       are skipped; a blank line terminates a block; zero expected rows is
+#       '----' followed by a blank line; a query whose text contains ORDER BY
+#       is compared in order, otherwise as a sorted multiset.
+#
+# The file is self-contained: the runner gives it a fresh temp database.
+
+# case 1: DDL outside any explicit transaction — §4's implicit transaction,
+# committing on success.
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+# case 2: a mutation outside an explicit transaction is likewise implicit.
+statement ok
+INSERT INTO t VALUES (1, 'one', TRUE);
+
+# case 3: the implicit transaction committed, so the row is visible to the
+# next statement.
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+
+# case 4: BEGIN with no transaction open is fine — it fills the empty
+# Option<TxnId>.
+statement ok
+BEGIN;
+
+# case 5: mutation inside an explicit transaction.
+statement ok
+INSERT INTO t VALUES (2, 'two', FALSE);
+
+# case 6: no MVCC (stated non-goal) and a single writer, so there is no other
+# reader and the open transaction reads its own uncommitted write.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	one
+2	two
+
+# case 7: §4, verbatim — BEGIN inside a transaction is an error.
+statement error
+BEGIN;
+
+# case 8: the failed BEGIN did not disturb the open transaction; it still
+# commits.
+statement ok
+COMMIT;
+
+# case 9: the committed work persisted.
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+2	two	FALSE
+
+# case 10: COMMIT cleared Option<TxnId>, so a second COMMIT has no
+# transaction to commit — an error, not a silent no-op.
+statement error
+COMMIT;
+
+# case 11: symmetrically, ROLLBACK with no transaction open is an error.
+statement error
+ROLLBACK;
+
+# case 12: a transaction whose work is thrown away — BEGIN.
+statement ok
+BEGIN;
+
+# case 13: an INSERT that will be rolled back.
+statement ok
+INSERT INTO t VALUES (3, 'three', TRUE);
+
+# case 14: an UPDATE that will be rolled back.
+statement ok
+UPDATE t SET b = 'clobbered' WHERE a = 1;
+
+# case 15: a DELETE that will be rolled back.
+statement ok
+DELETE FROM t WHERE a = 2;
+
+# case 16: all three are visible inside the transaction.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	clobbered
+3	three
+
+# case 17: throw it all away.
+statement ok
+ROLLBACK;
+
+# case 18: none of the three records had a commit record, so none is replayed:
+# the insert is gone, the update is undone, the deleted row is back.
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+2	two	FALSE
+
+# case 19: ROLLBACK also cleared Option<TxnId>, so implicit transactions work
+# again.
+statement ok
+INSERT INTO t VALUES (4, 'four', FALSE);
+
+# case 20: and that implicit transaction committed.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	one
+2	two
+4	four
+
+# case 21: several mutations under one COMMIT — BEGIN.
+statement ok
+BEGIN;
+
+# case 22: first of two.
+statement ok
+INSERT INTO t VALUES (5, 'five', TRUE);
+
+# case 23: second of two.
+statement ok
+INSERT INTO t VALUES (6, 'six', FALSE);
+
+# case 24: one COMMIT for both.
+statement ok
+COMMIT;
+
+# case 25: both landed.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	one
+2	two
+4	four
+5	five
+6	six
+
+# case 26: a rolled-back DELETE of every row — BEGIN.
+statement ok
+BEGIN;
+
+# case 27: DELETE with no WHERE clause (LogicalPlan::Delete predicate: None).
+statement ok
+DELETE FROM t;
+
+# case 28: inside the transaction the table reads empty — the zero-expected-row
+# form of §5 rule 3, which is legal.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+
+# case 29: undo it.
+statement ok
+ROLLBACK;
+
+# case 30: every row is back, because nothing uncommitted is ever replayed.
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	one
+2	two
+4	four
+5	five
+6	six
+
+# case 31: a nested BEGIN is still an error deep in a session, and the error
+# leaves the outer transaction usable (cases 32-33 run inside it).
+statement ok
+BEGIN;
+
+# case 32: still an error, second time.
+statement error
+BEGIN;
+
+# case 33: the outer transaction survived the failed BEGIN and can be rolled
+# back normally.
+statement ok
+ROLLBACK;
+
+# case 34: ROLLBACK of a CREATE TABLE. §4 pins that a rolled-back transaction's
+# records are never replayed, but it does NOT pin whether DDL — the catalog
+# write behind CREATE TABLE, which §2 says is "persisted via storage" — goes
+# through the WAL at all. So this case asserts only what is pinned: the DDL
+# statement succeeds inside the transaction and the ROLLBACK succeeds. Whether
+# table `dtxn` exists afterwards is the open question, filed as a spec gap; no
+# later case in this file references `dtxn`.
+statement ok
+BEGIN;
+
+# case 35: DDL inside an explicit transaction is accepted.
+statement ok
+CREATE TABLE dtxn (a INT PRIMARY KEY, b TEXT);
+
+# case 36: and the transaction rolls back without error.
+statement ok
+ROLLBACK;
+
+# case 37: whatever happened to `dtxn`, the session is healthy and `t` is
+# untouched — a rolled-back transaction cannot damage committed state.
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+2	two	FALSE
+4	four	FALSE
+5	five	TRUE
+6	six	FALSE
