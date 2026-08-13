@@ -214,10 +214,42 @@ SELECT a, b FROM t ORDER BY a;
 ```
 
 Values are tab-separated, `NULL` prints as `NULL`, `TRUE`/`FALSE` for
-bools. A `query` block without `ORDER BY` is compared as a sorted
-multiset; with `ORDER BY`, in order. `tests/logic_runner.rs` walks the
-directory, runs every file against a fresh temp database, and fails
-with the file, line, expected and actual on any mismatch.
+bools. `tests/logic_runner.rs` walks the directory, runs every file
+against a fresh temp database, and fails with the file, line, expected
+and actual on any mismatch.
+
+**The format, pinned.** One harness author and five corpus authors have
+to agree without negotiating, so these six rules are normative. The
+runner implements them; the corpus complies with them.
+
+1. A block starts on a line beginning `statement ok`, `statement error`
+   or `query`. Its SQL runs from the next line up to — for `query` — a
+   line that is exactly `----`, or for `statement`, the next blank line
+   or EOF. SQL may span several lines. Exactly **one** statement per
+   block.
+2. A `query` block's expected rows run from the line after `----` to the
+   next blank line or EOF.
+3. **Zero expected rows** is `----` followed immediately by a blank line
+   or EOF. The runner must accept that and require zero rows back. This
+   is the `LIMIT 0` and empty-join case, and it is legal.
+4. Because a blank line terminates a block, **no expected row may render
+   as an entirely empty line.** A case exercising `''` must select at
+   least one other column alongside it. That is a constraint on the
+   corpus, not a cleverness requirement on the runner.
+5. **Unordered comparison** (the SQL contains no `ORDER BY`): render each
+   actual row to its tab-joined string, sort both the actual and the
+   expected line vectors by Rust's `str` byte order, and compare
+   element by element. It is a multiset, so duplicates must match in
+   count.
+6. **Ordered comparison** applies when the statement text contains
+   `ORDER BY`, matched case-insensitively. Compare in order, no sorting.
+   The runner has no plan access, so the SQL text is the only signal
+   available and this is deliberately a textual test.
+
+**Asserting affected rows.** No directive carries a row count, and none
+is being added. A case that cares how many rows an `UPDATE` or `DELETE`
+touched asserts it indirectly, with a following `query` that counts or
+selects the survivors.
 
 **Determinism.** Same corpus, same output, every run. No `HashMap`
 iteration order in any output path — `ORDER BY` and `GROUP BY` output
