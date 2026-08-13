@@ -1,0 +1,213 @@
+# ins 01: this file is self-contained; it creates everything it uses
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+# ins 02: positional INSERT (§1)
+statement ok
+INSERT INTO t VALUES (1, 'one', TRUE);
+
+# ins 03
+query
+SELECT a, b, c FROM t;
+----
+1	one	TRUE
+
+# ins 04: INSERT with an explicit column list in schema order
+statement ok
+INSERT INTO t (a, b, c) VALUES (2, 'two', FALSE);
+
+# ins 05: explicit column list in a DIFFERENT order from the schema
+statement ok
+INSERT INTO t (c, b, a) VALUES (TRUE, 'three', 3);
+
+# ins 06: the reordered list landed each value in its own column
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+2	two	FALSE
+3	three	TRUE
+
+# ins 07: multi-row INSERT, three rows in one statement
+statement ok
+INSERT INTO t (a, b, c) VALUES (4, 'four', FALSE), (5, 'five', TRUE), (6, 'six', FALSE);
+
+# ins 08: all three rows of the multi-row insert are there
+query
+SELECT a, b FROM t ORDER BY a;
+----
+1	one
+2	two
+3	three
+4	four
+5	five
+6	six
+
+# ins 09: NULL into a TEXT and a BOOL column
+statement ok
+INSERT INTO t VALUES (7, NULL, NULL);
+
+# ins 10: NULL reads back as NULL (§5 print rules)
+query
+SELECT a, b, c FROM t ORDER BY a;
+----
+1	one	TRUE
+2	two	FALSE
+3	three	TRUE
+4	four	FALSE
+5	five	TRUE
+6	six	FALSE
+7	NULL	NULL
+
+# ins 11: TEXT into an INT column is a type mismatch (§1)
+statement error
+INSERT INTO t VALUES ('eight', 'x', TRUE);
+
+# ins 12: INT into a TEXT column
+statement error
+INSERT INTO t VALUES (8, 9, TRUE);
+
+# ins 13: TEXT into a BOOL column
+statement error
+INSERT INTO t VALUES (8, 'x', 'yes');
+
+# ins 14: INT into a BOOL column — there is no 0/1 coercion in this dialect
+statement error
+INSERT INTO t VALUES (8, 'x', 1);
+
+# ins 15: BOOL into an INT column
+statement error
+INSERT INTO t VALUES (TRUE, 'x', TRUE);
+
+# ins 16: BOOL into a TEXT column, through a named column list
+statement error
+INSERT INTO t (a, b, c) VALUES (8, TRUE, FALSE);
+
+# ins 17: duplicate PRIMARY KEY (bead .24)
+statement error
+INSERT INTO t VALUES (1, 'dup', TRUE);
+
+# ins 18: positional INSERT with too few values for the schema
+statement error
+INSERT INTO t VALUES (8, 'x');
+
+# ins 19: positional INSERT with too many values for the schema
+statement error
+INSERT INTO t VALUES (8, 'x', TRUE, 9);
+
+# ins 20: unknown table (§1)
+statement error
+INSERT INTO nosuch VALUES (1);
+
+# ins 21: a column list naming a column the table does not have
+statement error
+INSERT INTO t (a, b, nosuchcol) VALUES (8, 'x', TRUE);
+
+# ins 22: none of ins 11-21 landed a row — a failed statement commits nothing (§4)
+query
+SELECT a FROM t ORDER BY a;
+----
+1
+2
+3
+4
+5
+6
+7
+
+# ins 23: multi-row INSERT where only the second row is ill-typed
+statement error
+INSERT INTO t (a, b, c) VALUES (8, 'eight', TRUE), (9, 'nine', 'notabool');
+
+# ins 24: the good row of ins 23 did not land either — the statement is atomic (§4)
+query
+SELECT a FROM t ORDER BY a;
+----
+1
+2
+3
+4
+5
+6
+7
+
+# ins 25: text escaping needs its own table
+statement ok
+CREATE TABLE s (id INT PRIMARY KEY, txt TEXT);
+
+# ins 26: '' is the escape for a single quote inside a literal (§1)
+statement ok
+INSERT INTO s VALUES (1, 'it''s'), (2, 'a''b''c');
+
+# ins 27
+query
+SELECT id, txt FROM s ORDER BY id;
+----
+1	it's
+2	a'b'c
+
+# ins 28: the empty string is a TEXT value, not NULL
+statement ok
+INSERT INTO s VALUES (3, '');
+
+# ins 29: '' is selected alongside another column so no row is an empty line (§5 rule 4)
+query
+SELECT txt, id FROM s ORDER BY id;
+----
+it's	1
+a'b'c	2
+	3
+
+# ins 30: INT is i64
+statement ok
+CREATE TABLE big (n INT PRIMARY KEY, tag TEXT);
+
+# ins 31: the largest i64 and zero
+statement ok
+INSERT INTO big VALUES (9223372036854775807, 'max'), (0, 'zero');
+
+# ins 32
+query
+SELECT n, tag FROM big ORDER BY n;
+----
+0	zero
+9223372036854775807	max
+
+# ins 33: keywords are case-insensitive (§1)
+statement ok
+insert into BIG values (5, 'five');
+
+# ins 34: no ORDER BY, so compared as a sorted multiset of tab-joined lines (§5 rule 5)
+query
+SELECT n FROM big;
+----
+0
+5
+9223372036854775807
+
+# ins 35: a PK-less table, so every column may be NULL
+statement ok
+CREATE TABLE nulls (a INT, b TEXT, c BOOL);
+
+# ins 36: an all-NULL row and an all-present row
+statement ok
+INSERT INTO nulls VALUES (NULL, NULL, NULL), (1, 'x', TRUE);
+
+# ins 37: NULL sorts last in ASC (§1 NULL rule)
+query
+SELECT a, b, c FROM nulls ORDER BY a;
+----
+1	x	TRUE
+NULL	NULL	NULL
+
+# ins 38: the same row twice is fine without a PRIMARY KEY
+statement ok
+INSERT INTO nulls VALUES (1, 'x', TRUE);
+
+# ins 39: duplicates must match in count, it is a multiset (§5 rule 5)
+query
+SELECT b, a FROM nulls;
+----
+NULL	NULL
+x	1
+x	1

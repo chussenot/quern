@@ -1,0 +1,140 @@
+# ddl 01: CREATE TABLE with all three types and a PRIMARY KEY (docs/quern.md §1)
+statement ok
+CREATE TABLE t1 (a INT PRIMARY KEY, b TEXT, c BOOL);
+
+# ddl 02: a freshly created table is empty — zero expected rows (§5 rule 3)
+query
+SELECT a, b FROM t1;
+----
+
+# ddl 03: creating the same table twice is an error
+statement error
+CREATE TABLE t1 (a INT);
+
+# ddl 04: identifiers are case-insensitive (§1), so T1 is the same table as t1
+statement error
+CREATE TABLE T1 (x TEXT);
+
+# ddl 05: CREATE TABLE without a PRIMARY KEY
+statement ok
+CREATE TABLE t2 (a INT, b TEXT, c BOOL);
+
+# ddl 06: a PK-less table accepts rows
+statement ok
+INSERT INTO t2 VALUES (1, 'one', TRUE);
+
+# ddl 07: INT/TEXT/BOOL print as bare int, bare text, TRUE/FALSE (§5)
+query
+SELECT a, b, c FROM t2;
+----
+1	one	TRUE
+
+# ddl 08: a single INT column
+statement ok
+CREATE TABLE ints (n INT);
+
+# ddl 09
+statement ok
+INSERT INTO ints VALUES (7);
+
+# ddl 10
+query
+SELECT n FROM ints;
+----
+7
+
+# ddl 11: a single TEXT column
+statement ok
+CREATE TABLE texts (s TEXT);
+
+# ddl 12
+statement ok
+INSERT INTO texts VALUES ('hello');
+
+# ddl 13
+query
+SELECT s FROM texts;
+----
+hello
+
+# ddl 14: a single BOOL column
+statement ok
+CREATE TABLE bools (f BOOL);
+
+# ddl 15: multi-row insert of both bool values
+statement ok
+INSERT INTO bools VALUES (TRUE), (FALSE);
+
+# ddl 16: no ORDER BY, so this is a sorted multiset comparison (§5 rule 5)
+query
+SELECT f FROM bools;
+----
+FALSE
+TRUE
+
+# ddl 17: an INT PRIMARY KEY as the only column
+statement ok
+CREATE TABLE pk_only (id INT PRIMARY KEY);
+
+# ddl 18: unknown column type (bead .7: QuernError::Parse)
+statement error
+CREATE TABLE bad_type (a FLOAT);
+
+# ddl 19: two PRIMARY KEY columns is rejected (bead .7)
+statement error
+CREATE TABLE two_pk (a INT PRIMARY KEY, b INT PRIMARY KEY);
+
+# ddl 20: an empty column list is rejected (bead .7)
+statement error
+CREATE TABLE no_cols ();
+
+# ddl 21: selecting from a table that was never created is an unknown table (§1)
+statement error
+SELECT a FROM never_created;
+
+# ddl 22: DROP TABLE on an existing table, rows and all
+statement ok
+DROP TABLE t2;
+
+# ddl 23: the dropped table is gone
+statement error
+SELECT a FROM t2;
+
+# ddl 24: dropping it a second time is an unknown table
+statement error
+DROP TABLE t2;
+
+# ddl 25: dropping a table that never existed
+statement error
+DROP TABLE never_created;
+
+# ddl 26: the name is free again after the drop, with a different shape
+statement ok
+CREATE TABLE t2 (a INT PRIMARY KEY, b TEXT);
+
+# ddl 27: the recreated table is empty — the dropped rows did not survive
+query
+SELECT a, b FROM t2;
+----
+
+# ddl 28: keywords are case-insensitive (§1)
+statement ok
+create table MixedCase (Alpha int primary key, Beta text);
+
+# ddl 29: and so is the table name
+statement ok
+INSERT INTO MIXEDCASE VALUES (4, 'mixed');
+
+# ddl 30: column names are case-insensitive too
+query
+SELECT ALPHA, beta FROM MixedCase;
+----
+4	mixed
+
+# ddl 31: DROP TABLE resolves the name case-insensitively
+statement ok
+DROP TABLE mixedcase;
+
+# ddl 32
+statement error
+SELECT Alpha FROM MixedCase;
