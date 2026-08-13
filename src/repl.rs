@@ -37,8 +37,9 @@
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 
-use crate::sql::lexer;
-use crate::types::{QuernError, Result, Row, Value};
+use crate::plan::{self, Outcome};
+use crate::storage;
+use crate::types::{Result, Row, Value};
 
 const USAGE: &str = "usage: quern [--db <dir>] [script.sql]";
 const DEFAULT_DB: &str = "quern.db";
@@ -71,57 +72,54 @@ fn run(args: Vec<String>) -> std::result::Result<(), String> {
         }
     }
 
+    // The script is read BEFORE the database is opened, so a bad path exits 2
+    // without having created a database directory as a side effect.
+    let text = match &script {
+        Some(path) => {
+            Some(std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?)
+        }
+        None => None,
+    };
+
     let db = db.unwrap_or_else(|| PathBuf::from(DEFAULT_DB));
     let mut db = Db::open(&db).map_err(|e| e.to_string())?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    match script {
-        Some(path) => {
-            let text =
-                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            db.run_text(&text, &mut out)
-        }
+    match text {
+        Some(text) => db.run_text(&text, &mut out),
         None => db.interactive(&mut out),
     }
     .map_err(|e| format!("writing output: {e}"))
 }
 
-/// One open database plus the transaction state around it — everything a
-/// statement needs. Storage and txn move in here as their beads land; the
-/// name and both signatures are the ones bd_30-agents-dwm.36 proposes for
-/// `plan/mod.rs`, so that bead's owner can move this type there without
-/// touching a single call site.
+/// The REPL's session: one open database, and the line-loop machinery around
+/// it. The pipeline itself lives in `plan::execute` (bead .44) — this is the
+/// half that reads lines and writes bytes.
 pub struct Db {
-    /// The `--db` directory. The storage layer owns the files under it.
-    pub path: PathBuf,
+    db: storage::Db,
 }
 
 impl Db {
     pub fn open(path: &Path) -> Result<Db> {
-        // Storage/WAL open and replay land here (beads .5/.13/.14); until then
-        // opening cannot fail, but the signature already allows it to.
         Ok(Db {
-            path: path.to_path_buf(),
+            db: storage::Db::open(path)?,
         })
     }
 
-    /// The whole pipeline — `lex -> parse -> plan -> execute` — in one place,
-    /// so the REPL, the script runner and the `.slt` harness all take the same
-    /// path and the later beads have exactly one function to hook into.
+    /// One statement through the whole pipeline, thinned to what the line loop
+    /// prints: `Ok(None)` is "nothing to print" — DDL, a mutation's count,
+    /// transaction control, or input that was blank or only a comment.
     ///
-    /// `Ok(None)` means "no rows to print": DDL, DML, or input that was blank
-    /// or nothing but a comment. `Ok(Some(rows))` is a query result.
+    /// The affected-row count and the output column names are dropped here on
+    /// purpose: §5 compares neither, and printing either would break the
+    /// `statement ok` blocks the corpus compares byte for byte. A caller that
+    /// wants them calls `plan::execute` directly, as the `.slt` runner does.
     pub fn execute(&mut self, sql: &str) -> Result<Option<Vec<Row>>> {
-        let tokens = lexer::tokenize(sql)?;
-        if tokens.is_empty() {
-            return Ok(None);
-        }
-        // parse -> plan -> execute slot in here as they land. Until then this
-        // is an error value, not a panic: docs/quern.md §1.
-        Err(QuernError::Parse(
-            "not implemented: parser, planner and executor".into(),
-        ))
+        Ok(match plan::execute(sql, &mut self.db)? {
+            Outcome::Rows { rows, .. } => Some(rows),
+            Outcome::Count(_) | Outcome::Done => None,
+        })
     }
 
     /// Run every statement in `text`, including a trailing one with no `;`.
@@ -276,9 +274,16 @@ mod tests {
         assert_eq!(tail, "");
     }
 
+    /// A real database in a tempdir, dropped with the returned guard.
+    fn session() -> (tempfile::TempDir, Db) {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(dir.path()).unwrap();
+        (dir, db)
+    }
+
     #[test]
     fn blank_and_comment_only_input_produces_no_output() {
-        let mut s = Db::open(Path::new("unused")).unwrap();
+        let (_dir, mut s) = session();
         for input in ["", "   ", "\n\n", "-- just a comment"] {
             let mut out = Vec::new();
             s.run_text(input, &mut out).unwrap();
@@ -288,12 +293,30 @@ mod tests {
 
     #[test]
     fn statement_error_is_printed_and_the_loop_continues() {
-        let mut s = Db::open(Path::new("unused")).unwrap();
+        let (_dir, mut s) = session();
         let mut out = Vec::new();
+        // `SELECT 1` has no FROM, so both lines are parse errors — and both
+        // are reported, because a statement error never stops the loop.
         s.run_text("SELECT 1;\nSELECT 2;\n", &mut out).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out.lines().count(), 2, "both statements reported: {out:?}");
         assert!(out.lines().all(|l| l.starts_with("Error: ")), "{out:?}");
+    }
+
+    /// End to end through the printing path: DDL and INSERT print nothing, a
+    /// SELECT prints one tab-separated line per row.
+    #[test]
+    fn a_script_runs_and_only_the_query_prints() {
+        let (_dir, mut s) = session();
+        let mut out = Vec::new();
+        s.run_text(
+            "CREATE TABLE t (a INT PRIMARY KEY, b TEXT);\n\
+             INSERT INTO t VALUES (2, 'two'), (1, NULL);\n\
+             SELECT a, b FROM t ORDER BY a;\n",
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8(out).unwrap(), "1\tNULL\n2\ttwo\n");
     }
 
     #[test]
