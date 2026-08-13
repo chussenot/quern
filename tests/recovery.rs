@@ -25,15 +25,14 @@
 //! timeout guarding that, because introducing one costs more than it buys for a
 //! child we feed a fixed script.
 //!
-//! # Why two of the three are `#[ignore]`d
+//! # All three run
 //!
-//! Not because they are flaky: because the engine they drive is not connected
-//! yet. `repl::Db::execute` still returns `not implemented: parser, planner and
-//! executor` for every statement (bead .44, `plan::execute`, is unwritten), and
-//! `repl::Db` is a placeholder that never opens the real `storage::Db`, so a run
-//! today creates no database at all. The assertions below are the ones §5 asks
-//! for and are deliberately NOT weakened to pass against that; remove both
-//! `#[ignore]`s once .44 lands and the REPL holds a `storage::Db`.
+//! The two `kill -9` tests were written before the planner existed and carried
+//! `#[ignore]` with bead .44 named, rather than being weakened to pass against
+//! an unconnected engine. .44 landed, `repl::Db` now wraps the real
+//! `storage::Db`, and both tests passed on the first run against it — so the
+//! attributes are gone and the crash-recovery property is graded on every
+//! `cargo test`. That is the whole point of having written them strictly.
 
 use std::io::{Read, Write};
 use std::path::Path;
@@ -49,7 +48,6 @@ use quern::types::{Column, Row, Schema, Type, Value};
 const PROMPT: &str = "quern> ";
 
 #[test]
-#[ignore = "blocked on bd_30-agents-dwm.44: the REPL has no planner wired in yet"]
 fn kill_9_before_commit_discards_the_open_transaction() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = spawn(dir.path());
@@ -78,7 +76,6 @@ fn kill_9_before_commit_discards_the_open_transaction() {
 }
 
 #[test]
-#[ignore = "blocked on bd_30-agents-dwm.44: the REPL has no planner wired in yet"]
 fn kill_9_after_commit_keeps_the_committed_transaction() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = spawn(dir.path());
