@@ -26,8 +26,11 @@ rc=$?
 end=$(date +%s.%N)
 
 dur=$(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.3f", b-a}')
-# first 200 chars of stderr, JSON-escaped enough for one line
-tail_err=$(head -c 200 "$err" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
+# First 200 chars of stderr, flattened to one line. Newline, CR and TAB all
+# have to go: a raw U+0009 inside a JSON string is as invalid as a raw newline,
+# and the first pass at this fixed argv while leaving stderr on the old filter
+# (bead .47). Same treatment for both fields, so they cannot drift again.
+tail_err=$(head -c 200 "$err" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g')
 rm -f "$err"
 
 # 141 = 128+SIGPIPE: the command was killed because the CALLER stopped reading
