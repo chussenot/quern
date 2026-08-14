@@ -536,3 +536,109 @@ claims, one of which is a false citation. Both of the run-5 orchestrator finding
 therefore recurred in run 6 and both were caught within minutes rather than an
 hour — the unleased shared-file commit (`.48`, self-corrected on the next edit)
 and the false section citation (`.53`).
+
+---
+
+## Pass 4 — 2026-08-14, `bd_30-agents-2jk.2` (error) and the pattern
+
+**Running totals: 97 claims checked — 89 VERIFIED, 3 UNVERIFIABLE, 5 FALSE.**
+Beads filed: `.47`, `.48`, `.51`, `.52` (mine), `.53`, `.56`.
+
+### `bd_30-agents-2jk.2` — error · 19 claims · 16 VERIFIED, 1 UNVERIFIABLE, 2 FALSE
+
+The first close where a **real integration build** was possible, and it holds
+up. Reproduced by me at `a352dd0` in a fidelity-checked worktree:
+
+| Claim | Measured | Verdict |
+|---|---|---|
+| "cargo test 38 passed 0 failed" | **38 passed; 0 failed** | VERIFIED |
+| "9 are mine and named (`grep '^test error::'` returns 9)" | `grep -c '^test error::'` = **9**, all nine names present | VERIFIED |
+| "cargo fmt clean; clippy `--all-targets -D warnings` clean" | exit 0, exit 0 | VERIFIED |
+| "§3 implemented VERBATIM … plus `pub type Result<T>`" | matches `docs/treadle.md:125-132` | VERIFIED |
+| "`.36` `pub const MAX_DEPTH: usize = 1000`… DROPPED its limit arg" | `error.rs:56`, and `recursion_limit(line: u32)` takes no limit | VERIFIED |
+| "`.45` `internal(line,what)`" | `error.rs:327` | VERIFIED |
+| "built with value.rs actually present (386 lines)" | `value.rs` present at 386 lines; the build is genuinely integrated, not stubbed | VERIFIED |
+| "commits `c5be387`, `6c9d0ac`, `a352dd0`" | all three exist on `agent/error`, all trailered `Pact-Agent: error` | VERIFIED |
+| "Display byte-exact per §5, pinned by a test against §5's own example" | §5 example is `error: Value at line 3: divide by zero`; the test asserts it | VERIFIED |
+
+**FALSE (1)** — "Landed `treadle/src/error.rs` (**527 lines**)". Actual at
+`a352dd0`: **584**. And 527 matches no state the file ever had — the three
+commits leave it at 507, 564, 584 (`+506`, `+62/-5`, `+20`; net 583 over the
+1-line stub).
+
+**FALSE (2)** — "`agent/error` is **0 commits behind master** as of `a352dd0`".
+Actual at close time: **1 behind**. master carried `fae373d` (a pact log
+checkpoint) from `10:32:20+02:00`; the close was `10:36:52+02:00`;
+`a352dd0` does not contain it. Immaterial in content — no code in it — but
+false as written.
+
+**Explicitly NOT called false, because timing exonerates it.** The same reason
+says "master's `error.rs` is STILL the 1-line stub … MASTER DOES NOT BUILD
+UNTIL `agent/error` IS MERGED". That was **true** at `10:36:52`. The merge
+`8078c79` landed at `10:38:24` — **92 seconds later**. Reading master *now*
+shows a 584-line `error.rs` and would make the claim look false; it was not.
+A moving target is not a lie, and this is precisely the line between
+UNVERIFIABLE and FALSE that this file exists to hold.
+
+**UNVERIFIABLE (transient)** — "lexer held `treadle/src/error.rs` (exit 2, 2506s
+remaining) … they released within ~2 min". The release is in the log
+(`08:17:37Z` → `08:21:32Z`), but the exit-2 refusal and its "2506s remaining"
+were printed to a shell I cannot replay, and the pre-fix `pw` records don't
+carry it. The *substance* — that `lexer` held it and released having written
+nothing — is independently VERIFIED (`error.rs` on `agent/lexer` is
+byte-identical to the baseline stub).
+
+### The finding that matters most this pass: **every FALSE claim in run 6 is an unmeasured number** → `.56`
+
+| Bead | Claim | Actual | Filed |
+|---|---|---|---|
+| `.9` lexer | "lexer.rs held ~25m" | 9m 53s | `.51` |
+| `.9` lexer | "error.rs held ~6m" | 3m 55s | `.51` |
+| `.2` error | "error.rs 527 lines" | 584 | `.56` |
+| `.2` error | "0 commits behind master" | 1 behind | `.56` |
+| `.48` **me** | "permanently blind" | false | `.52` |
+
+Four of the five are numbers. The fifth — mine — was a universal quantifier
+asserted from a single observation, which is the same error in a different
+grammar: **a quantity stated more confidently than it was measured.**
+
+Not one of the five is a claim about *whether* the work was done. Every one is
+a claim about *how much*, and in every case the exact figure was one command
+away:
+
+```bash
+git rev-list --count <tip>..master        # commits behind
+git show <rev>:<path> | wc -l             # line count
+jq ... .pact/events.jsonl                 # lease held, to the nanosecond
+# test count: the cargo output already on the author's screen
+```
+
+So the audit's practical yield is not "five agents did bad work" — the code
+behind all five is clean, and I re-ran every gate to say so. It is one habit:
+**in a close reason, a number is either copy-pasted from a command run in that
+session, or it is not stated.** "About half an hour" is fine and
+unfalsifiable-by-design; "~25m" reads as measured, so it gets measured, and then
+it is wrong. Prefer the vague phrasing to the precise-looking guess.
+
+I consolidated rather than filing a P1 per instance: five beads each saying "a
+number was wrong" is noise that would get the audit discounted, which is the one
+failure mode an auditor cannot recover from. `.51` and `.56` between them carry
+all five, and on both I said in writing that P1 overstates the severity and
+asked for re-prioritisation rather than quietly downgrading it myself.
+
+### Orchestrator, pass 4
+
+Nothing new closed by the orchestrator this pass, so nothing new to find. Its
+standing record: **10 claims audited across `.47`, `.48` and the six spec beads
+— 9 VERIFIED, 1 FALSE (`.53`)**. It has also now merged `agent/error` to master
+(`8078c79`), which resolved the "master does not build" condition `.2` reported,
+92 seconds after that bead closed.
+
+### Still unaudited at the end of this pass
+
+`bd_30-agents-2jk.10` (ast) closed while pass 4 was being written and has not
+been touched. `.29`/`.30`'s "a `bd create` reported exit 1 while succeeding"
+remains UNVERIFIABLE and is worth resolving, because the two possible
+explanations — a misremembered exit code, or bd calls made outside `tools/pw` —
+have very different implications for the harness data, and one of them is the
+brief's "hole in the data".
