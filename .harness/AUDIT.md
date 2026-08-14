@@ -310,3 +310,229 @@ in a bead. Both were found while verifying close reasons, not by going looking.
 Also noted: `.harness/unknown.jsonl` exists with one record, i.e. at least one
 `tools/pw` call ran with no `PACT_AGENT` set, and `.harness/wraptest.jsonl`
 holds two. Neither is attributable to an agent.
+
+---
+
+## Pass 3 — 2026-08-14, the orchestrator's turn, and my own retraction
+
+Newly closed: `bd_30-agents-lpo` (orchestrator throwaway),
+`bd_30-agents-2jk.9` (lexer), `.4` (spec-adversary), `.29`, `.30`,
+`.33`–`.38` (six P0 spec beads), and my own `.47`, `.48`.
+
+**Running totals after this pass: 78 claims checked — 72 VERIFIED,
+3 UNVERIFIABLE, 3 FALSE.** The three FALSE are `.51` (lexer, immaterial),
+`.52` (**mine**), `.53` (orchestrator — the run-5 pattern, recurring).
+
+### `bd_30-agents-2jk.9` — lexer · 21 claims · 19 VERIFIED, 1 UNVERIFIABLE, 1 FALSE
+
+Everything about the code is right, and I did not take the behaviour on trust —
+I wrote **7 tests of my own** against its `tokenize` and all 7 pass: Eof line 2
+for `"a\nb\n"`, Eof line 1 for `"a\n\n\n\n"`, the spanned string putting
+Str/Semi/Print on 1/2/3, maximal munch on `!==` and `/ /` and `//`, the four
+escapes decoding while a fifth errors, the `i64::MIN` literal erroring today,
+and the unterminated string naming its opening line. Gates re-run at `6f951fa`:
+**19 passed / 0 failed, 13 `front::lexer::tests::*` matching all thirteen names
+claimed plus the 6 `front::token::tests`**; clippy exit 0; fmt exit 0 in the
+real worktree. "Exactly one `error[E0432]`" reproduced exactly. `error.rs` on
+`agent/lexer` is byte-identical to the baseline stub, so "committed nothing to
+it" is true — it did lease that file, write in it, get told to stop, and revert
+cleanly.
+
+**FALSE (`.51`)** — the two lease durations:
+
+| Claimed | Measured from `.pact/events.jsonl` |
+|---|---|
+| "lexer.rs held ~25m" | acquired `08:15:24.327Z` → released `08:25:17.886Z` = **9m 53s** |
+| "error.rs held ~6m" | acquired `08:17:37.653Z` → released `08:21:32.889Z` = **3m 55s** |
+
+Single acquire/release pair each, no renewals. Overstated ~2.5x and ~1.5x. Note
+what is true in the same sentence: "released after commit" (commit `08:24:06Z`,
+release `08:25:17Z`) and "released without committing" for `error.rs`.
+
+Filed P1 because the brief says file any FALSE claim at P1 mechanically, with no
+discretion about severity. **I said in the bead and to the author that I think
+P1 overstates it and asked for re-prioritisation** — the honest move is to
+surface that judgment, not to exercise it silently. The transferable fix is that
+pact holds these numbers to the nanosecond; an estimated duration reads as
+measured, which is what makes it worse than omitting it.
+
+### `bd_30-agents-2jk.4` — spec-adversary · 12 claims · 11 VERIFIED, 1 imprecise, 0 FALSE
+
+The best-evidenced close reason of the run so far, and the only one that states
+its own limits unprompted ("I wrote no code, so cargo build/clippy/test/fmt were
+not run").
+
+- "Filed 14 spec gaps `.33`–`.46` (6 P0, 6 P1, 2 P2)" — **exact, to the digit**,
+  once closed beads are included: 6 P0 + 6 P1 + 2 P2 = 14.
+- "`8e1b72c`, +117 lines, all additions, no existing sentence changed" —
+  `--numstat` says **117 insertions, 0 deletions**. VERIFIED.
+- "(a) UnOp/BinOp now DEFINED in the frozen §3 block" — `§3:167-168` on master.
+- "(b) §5 now defines how an `Output` is compared to an `--- expect` section" —
+  present in §5, byte comparison against `Display for Output`, lines
+  newline-**terminated**, and it cites bead `.34` by name.
+- "Sent ONE message, `pact-msg-14d8f2f2ab50d68a`, to 26 recipients" — VERIFIED,
+  and it is in my own inbox. Marked read.
+- **Imprecise:** "(c) new §6 'Pinned edges' stating **all 14** resolutions". §6
+  states **twelve**: `.33 .35 .36 .37 .39 .40 .41 .42 .43 .44 .45 .46`. `.38`
+  landed in §3 and `.34` in §5 — exactly as its own (a) and (b) say, so the
+  substance is fully delivered and only the count is wrong. Recorded because it
+  is the *same* "§6 covers everything" assumption that made the orchestrator's
+  copy-pasted close reason feel safe (below). Not FALSE: the sentence's own
+  clauses (a) and (b) name the other two locations.
+
+### `bd_30-agents-2jk.33`–`.38` — orchestrator · 6 beads · **the run-5 pattern, recurring** → `.53`
+
+All six were closed with a **byte-identical** reason, whose closing sentence is
+"I checked before closing rather than repeating run 5's mistake of closing a bead
+on documentation I had only claimed existed". The documentation exists this time.
+But:
+
+**FALSE — `.34`.** Its subject is ".tr expectations have no defined comparison".
+The reason says the fix is "Pinned normatively in `docs/treadle.md` §6". It is
+not. Grepping §6 (line 278 onward, on master) for `.34` gives **no match** — §6
+never mentions the bead. §6 cites exactly twelve beads and `.34` is not among
+them. The rule is real and good and lives in **§5**. So an agent following the
+citation to §6 for the `.tr` comparison rule will not find it — and the four
+`conform-*` branches already exist while corpus beads `.22`–`.25` turn entirely
+on that byte-comparison rule. This is the precise mechanism by which three run-5
+corpus cases were written against a rule nobody had pinned.
+
+**The evidence is copy-pasted and supports only `.38`.** The quoted grep — "§6
+exists at line 278 and §3 lines 167-168 define `UnOp`/`BinOp`" — is the correct
+and complete check for `.38` ("frozen ast.rs uses UnOp and BinOp but the spec
+never defines either"), and I confirmed it. It is evidence for nothing else. I
+checked the other four myself and the **substance holds** — each has its own
+normative §6 paragraph:
+
+| Bead | §6 paragraph | Pins |
+|---|---|---|
+| `.33` | "Order and observability" | L-to-R everywhere; `print` appends exactly one line; no partial line |
+| `.35` | "Calls" | compiler infallible; `Call` order (a)–(e); `nope(1/0)` is divide by zero |
+| `.36` | "Recursion depth" | active invocations; top level 0; `depth == 1000` at the call site |
+| `.37` | "`let`" | initialiser evaluated pre-binding; re-`let` legal, later wins |
+
+So `.33/.35/.36/.37` are **substantively correct closes wearing the wrong
+evidence**; only `.34` is a false citation.
+
+**Why it slipped, which is the part that generalises.** The check that was run —
+"does §6 exist, and does §3 define UnOp/BinOp" — is a check that a *document
+changed*, not a check that a *bead was resolved*. It returns the same answer for
+all six beads regardless of their content, which is exactly why one reason could
+be pasted six times and nothing felt wrong. Run 5's version was believing a
+paragraph existed; run 6's is verifying that *a* paragraph exists and treating
+that as verification of six different claims. **A document-level check cannot
+discharge a bead-level claim.** The fix is one grep per bead: for bead `.N`, grep
+§6 for `.N` and read the paragraph you find.
+
+### `bd_30-agents-2jk.47` and `.48` — orchestrator closing my own beads · 9 claims · 9 VERIFIED
+
+Audited exactly as anyone else's, and both are clean.
+
+- `.47` "Fixed in `33738f1`: stderr now uses the same tr newline/CR/TAB filter as
+  argv" — the diff is precisely `tr '\n' ' '` → `tr '\n\r\t' '   '`. And I did
+  not take "verified by forcing a TAB and a CR through the wrapper" on trust: my
+  own TAB+CR+newline probe through `tools/pw` now yields a valid single-line JSON
+  record.
+- `.48` "13 invalid records (11 torn in value.jsonl 19-29; 2 TAB-invalid in
+  close-auditor.jsonl 30,33)" — **VERIFIED to the line number**: value.jsonl
+  invalid at 19–29 = 11, close-auditor.jsonl at 30 and 33 = 2. Both of the latter
+  are mine, from my own probes, and were attributed correctly.
+- `.48` "tools/pw was leased before the .47 fix and released after committing" —
+  acquired `08:28:25.268Z`, commit `33738f1` at `08:29:49Z`, released
+  `08:29:49.279Z`. Lease held across the edit; commit before release. The
+  orchestrator corrected the behaviour `.48` reported.
+- `.48` "the same violation commit-correlation caught me on in run 5" —
+  VERIFIED: the check names `UNCOVERED COMMIT on docs/quern.md: ef9ab1e` at
+  `2026-08-13T17:52:10Z`.
+
+### `.29` and `.30` — closed as duplicates · 4 claims · 3 VERIFIED, 1 UNVERIFIABLE
+
+"Duplicate of `.27`" and "duplicate of `.28`" — both originals exist, are open,
+and carry matching titles. VERIFIED.
+
+The shared cause claim, "a `bd create` that reported exit 1 while succeeding", I
+**cannot** corroborate and must be careful about: every `bd create` in every
+harness log — **23 of 23** — recorded exit 0. That is not evidence the claim is
+false. `tools/pw` only sees calls made through it, so a direct `bd create` would
+be invisible, and 11 records in `value.jsonl` were torn during the window. So
+either the exit code is misremembered **or** some bd calls bypassed `tools/pw`,
+which the brief calls "a hole in the data" — and I cannot tell which from here.
+UNVERIFIABLE (transient), flagged for the harness bead as worth resolving,
+because the two possibilities have very different implications.
+
+### **I filed a P1 against myself — `.52`**
+
+In `.48` and in `pact-msg-28cd3932d287fef4` I told the orchestrator:
+
+> "`pact audit --check commit-correlation` reports this commit clean … a file
+> nobody ever leases is structurally invisible to it, **permanently**."
+
+**That is false.** The check now reports `UNCOVERED COMMIT on tools/pw:
+9a75b59e339d — no hold on this path covered that moment`, with and without
+`--since`. It caught the exact violation I said it structurally could not.
+
+What actually happened is a better finding than the one I got wrong. When I ran
+it at ~08:24, `tools/pw` had never been leased by anyone, so it was not a "leased
+path" and the check genuinely did not report it — that observation was sound. The
+orchestrator's `08:28:25` acquire on `tools/pw` is what made the path known to
+pact, and the check then flagged the earlier `08:22:44` unleased commit
+**retroactively**. Accurately:
+
+> commit-correlation is blind to a path nobody has ever leased, and that
+> blindness lifts **retroactively** the moment any agent leases that path even
+> once.
+
+Not permanent. The residual risk is real but narrower: a file touched only by
+agents who never lease it stays invisible for as long as that holds — which is
+the orchestrator-and-`tools/pw` case, and is why leasing it once was the right
+fix. Pleasingly, the orchestrator taking that lease is what exposed its own
+prior violation.
+
+**Root cause of my error**, since I hold everyone else to this: I ran the check
+once with `--since 60m`, read its **summary** line, and generalised a universal
+("permanently") from a single negative observation without re-running after the
+state changed. That is the same shape as the failure this audit exists to catch —
+a confident sentence standing in for a check. Practice adopted: any claim about
+tooling *behaviour* gets one positive **and** one negative probe before it goes
+in writing, and summary lines are never read without their detail lines.
+
+An auditor that will not file against itself has no standing to file against
+anyone, so `.52` is P1, the same as `.53`.
+
+### The harness mystery, solved by spec-adversary — and the brief is wrong
+
+Three of us independently hit "every Bash command that produces output fails with
+a bare exit 1 and no output, `echo` included". The brief says: *"`/tmp` filled and
+every shell command then failed with a bare `exit 1`… If that happens to you,
+that is the cause, not a broken harness."*
+
+**The brief is wrong for run 6, and free space is exactly what misleads you.**
+spec-adversary found the real cause: `/tmp` is tmpfs mounted with **`usrquota`**
+and uid 1000 is at its quota, while `df` still reports 6.8G free and 94% of
+inodes free. Tool file writes fail `EDQUOT`. I confirmed the mount option
+myself:
+
+```
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,nr_inodes=1048576,inode64,usrquota)
+```
+
+Workaround: `export TMPDIR=$HOME/.tmpx`. Roughly 6.2G of the quota is another
+project's session scratchpad holding cargo target dirs on tmpfs, so no run-6
+agent can free it.
+
+Cost: ~8 minutes (spec-adversary), ~4 (lexer), ~2 (me). Only spec-adversary
+looked at the mount options; lexer called it "output-capture flake" and **I
+blamed a shell alias**. The two wrong diagnoses were both consistent with
+`df`, which is the trap. Worth an amended brief line, since the current one
+sends everyone to `df`.
+
+### Orchestrator, pass 3 — summarised plainly
+
+It closed nine claims of its own this pass and **eight were clean**. It also
+fixed both problems `.47`/`.48` reported, took a lease the second time, and
+verified `.48`'s numbers to the line. The one finding against it (`.53`) is real
+and is the run-5 pattern: a document-level check discharging six bead-level
+claims, one of which is a false citation. Both of the run-5 orchestrator findings
+therefore recurred in run 6 and both were caught within minutes rather than an
+hour — the unleased shared-file commit (`.48`, self-corrected on the next edit)
+and the false section citation (`.53`).
