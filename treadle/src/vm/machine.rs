@@ -1,6 +1,6 @@
-//! bead: machine-core (`.16`) — the stack machine: dispatch, arithmetic,
-//! comparison, locals, globals. Calls, frames and the recursion limit are
-//! `machine-calls` (`.17`), which shares this file; see [`Machine::call`].
+//! beads: machine-core (`.16`) — dispatch, arithmetic, comparison, locals,
+//! globals; machine-calls (`.17`) — calls, frames, `Return`, the builtins and
+//! the recursion limit (see [`Machine::call`]).
 //!
 //! # What this file is allowed to decide, and what it is not
 //!
@@ -40,7 +40,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::error::{Result, TreadleError};
+use crate::error::{Result, TreadleError, MAX_DEPTH};
 use crate::output::Output;
 use crate::value::Value;
 use crate::vm::opcode::{Chunk, Code, Op};
@@ -73,8 +73,12 @@ struct Machine<'c> {
     /// Globals by NAME (§6/`.35`). Iteration order is never observed.
     globals: HashMap<String, Value>,
     /// `main` is `frames[0]` with `base == 0`, so a frame always exists and
-    /// `machine-calls` has nothing special to do for the top level.
+    /// the top level is not a special case.
     frames: Vec<Frame>,
+    /// **Active invocations**, not frames (§6/`.36`): `main` is depth 0 and is
+    /// not an invocation, so this is always `frames.len() - 1` and is kept
+    /// separately only so the check reads as the spec sentence does.
+    depth: usize,
 }
 
 impl<'c> Machine<'c> {
@@ -88,6 +92,7 @@ impl<'c> Machine<'c> {
                 func: None,
                 ip: 0,
             }],
+            depth: 0,
         }
     }
 
@@ -241,29 +246,124 @@ impl<'c> Machine<'c> {
         Ok(())
     }
 
-    // ---- calls: the seam for machine-calls (bd .17) -----------------------
+    // ---- calls (bd .17) ---------------------------------------------------
 
-    /// **`machine-calls` owns this.** Everything it needs is already here: push
-    /// a [`Frame`] with `base: self.stack.len() - argc`, `func:
-    /// chunk.find_function(name)` and `ip: 0` — the arguments are already in
-    /// slots `0..argc` where the caller pushed them — and add a `depth: usize`
-    /// field for the §6/`.36` check. The loop reads the frame fresh every
-    /// iteration and resolves its code through [`Machine::code_of`], so growing
-    /// `self.frames` needs no change above this line.
+    /// Enter a call. The `argc` arguments are already on the stack, evaluated
+    /// left to right — that is step (a), and the bytecode is what forces it, so
+    /// `nope(1/0)` is `divide by zero`.
     ///
-    /// Order is fixed by §6/`.35`: name (builtins `len`/`str`/`int` first), then
-    /// arity, then `depth == error::MAX_DEPTH`, then enter.
-    fn call(&mut self, _name: u32, _argc: u32, line: u32) -> Result<()> {
-        Err(TreadleError::internal(line, "call is not implemented yet"))
+    /// The remaining steps are §6/`.35`'s, in exactly this order and all at the
+    /// call's line: **(b)** resolve the name — the three builtins first, since
+    /// they are reserved (§6/`.42`) and so cannot be shadowed — then
+    /// [`Chunk::find_function`], else `undefined_function`; **(c)** arity;
+    /// **(d)** `depth == MAX_DEPTH`; **(e)** enter.
+    ///
+    /// The order of (c) before (d) is observable: a wrong-arity call made at
+    /// depth `MAX_DEPTH` reports the *arity* error. See
+    /// `machine_wrong_arity_at_the_depth_limit_reports_the_arity_error`.
+    fn call(&mut self, name: u32, argc: u32, line: u32) -> Result<()> {
+        let callee = self.name(name, line)?;
+        if matches!(callee, "len" | "str" | "int") {
+            return self.call_builtin(callee, argc, line);
+        }
+        let idx = self
+            .chunk
+            .find_function(callee)
+            .ok_or_else(|| TreadleError::undefined_function(line, callee))?;
+        let arity = match self.chunk.function(idx) {
+            Some(f) => f.arity,
+            None => return Err(TreadleError::internal(line, "function index out of range")),
+        };
+        if arity != argc {
+            return Err(TreadleError::wrong_arity(
+                line,
+                callee,
+                arity as usize,
+                argc as usize,
+            ));
+        }
+        // (d) — the callee's frame does not exist yet, so the MAX_DEPTHth
+        // nested invocation succeeds and the next one fails here.
+        if self.depth == MAX_DEPTH {
+            return Err(TreadleError::recursion_limit(line));
+        }
+        // (e) — the arguments become the callee's first locals where they
+        // already lie: slot `n` is `stack[base + n]`, so nothing moves. The
+        // frame carries no reference to the caller's, which is what makes a
+        // body see globals and its own locals and nothing else (§2, no
+        // closures).
+        let base = match self.stack.len().checked_sub(argc as usize) {
+            Some(b) => b,
+            None => return Err(TreadleError::internal(line, "stack underflow in call")),
+        };
+        self.frames.push(Frame {
+            base,
+            func: Some(idx),
+            ip: 0,
+        });
+        self.depth += 1;
+        Ok(())
     }
 
-    /// **`machine-calls` owns this.** Pop the return value, truncate the stack
-    /// to `frame.base`, pop the frame, push the value.
+    /// `len`/`str`/`int`. A builtin is **not an invocation**: it consumes no
+    /// depth and cannot hit the recursion limit (§6/`.36`), because there is no
+    /// frame to enter — it runs here and leaves its result on the stack.
+    ///
+    /// Every builtin takes exactly one argument, so (c) is `argc != 1`.
+    //
+    // ponytail: the three bodies are here rather than in `value.rs` because
+    // §6/`.39` (the bead that would have put them there) never landed and
+    // value.rs is frozen. Both engines therefore spell them independently —
+    // the wording is still error.rs's, but the *choice* of constructor is not
+    // pinned anywhere. bd .39 is the upgrade path.
+    fn call_builtin(&mut self, name: &str, argc: u32, line: u32) -> Result<()> {
+        if argc != 1 {
+            return Err(TreadleError::wrong_arity(line, name, 1, argc as usize));
+        }
+        let v = self.pop(line)?;
+        let out = match (name, &v) {
+            // §2: bytes, not characters.
+            ("len", Value::Str(s)) => Value::Int(s.len() as i64),
+            // §3's one display form, so `str(x)` and `print x` agree.
+            ("str", _) => Value::str(v.to_string()),
+            // §6/`.41`: exactly `s.parse::<i64>()`.
+            ("int", Value::Str(s)) => match s.parse::<i64>() {
+                Ok(n) => Value::Int(n),
+                Err(_) => return Err(TreadleError::bad_int(line, s.as_str())),
+            },
+            ("len" | "int", _) => {
+                return Err(TreadleError::unary_type_mismatch(
+                    line,
+                    name,
+                    "Str",
+                    v.type_name(),
+                ))
+            }
+            _ => return Err(TreadleError::internal(line, "not a builtin")),
+        };
+        self.stack.push(out);
+        Ok(())
+    }
+
+    /// Leave a call: pop the return value, drop the callee's whole frame —
+    /// arguments and locals both — and push the value in the caller, whose `ip`
+    /// the loop already advanced past its `Call`.
+    ///
+    /// `Return` in `main` is unreachable: `return` outside a function is a
+    /// `Parse` error (§2), so the front end never produces it.
     fn ret(&mut self, line: u32) -> Result<()> {
-        Err(TreadleError::internal(
-            line,
-            "return is not implemented yet",
-        ))
+        if self.frames.len() < 2 {
+            return Err(TreadleError::internal(line, "return outside of a function"));
+        }
+        let v = self.pop(line)?;
+        let frame = match self.frames.pop() {
+            Some(f) => f,
+            None => return Err(TreadleError::internal(line, "no frame")),
+        };
+        self.stack.truncate(frame.base);
+        self.stack.push(v);
+        self.depth = self.depth.saturating_sub(1);
+        Ok(())
     }
 
     // ---- helpers, all total ----------------------------------------------
@@ -350,7 +450,7 @@ fn binary(op: Op, a: &Value, b: &Value, line: u32) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vm::opcode::PLACEHOLDER;
+    use crate::vm::opcode::{Function, PLACEHOLDER};
 
     /// A chunk whose `main` prints one expression, built from a closure so each
     /// test reads as the program it stands for. Everything is on line 1 unless a
@@ -780,21 +880,429 @@ mod tests {
         assert!(m.code_of(None).is_ok());
     }
 
-    /// `Call`/`Return` are `machine-calls` (bd .17). Until then they fail
-    /// cleanly rather than panicking or silently doing nothing — which is also
-    /// the assertion that the loop reaches them at all.
+    // ---- calls, frames and Return (bd .17) --------------------------------
+
+    /// A function body, built the way `main` is.
+    fn func(name: &str, arity: u32, build: impl FnOnce(&mut Code)) -> Function {
+        let mut code = Code::new();
+        build(&mut code);
+        Function {
+            name: name.to_string(),
+            arity,
+            code,
+        }
+    }
+
+    /// `fn add(a, b) { return a + b; }  print add(1, 2);  print add(10, 20);`
+    /// — two calls in a row, so a leaked frame or a stack the callee failed to
+    /// clean up shows as a wrong second answer rather than as nothing.
     #[test]
-    fn machine_call_and_return_are_the_seam_for_bd_17() {
+    fn machine_calls_a_function_and_returns_its_value() {
+        let c = chunk(|c| {
+            let add = c.add_name("add");
+            let (a, b) = (c.add_const(Value::Int(1)), c.add_const(Value::Int(2)));
+            let (x, y) = (c.add_const(Value::Int(10)), c.add_const(Value::Int(20)));
+            c.add_function(func("add", 2, |code| {
+                code.emit(Op::GetLocal(0), 1);
+                code.emit(Op::GetLocal(1), 1);
+                code.emit(Op::Add, 1);
+                code.emit(Op::Return, 1);
+            }));
+            c.main.emit(Op::Const(a), 3);
+            c.main.emit(Op::Const(b), 3);
+            c.main.emit(Op::Call { name: add, argc: 2 }, 3);
+            c.main.emit(Op::Print(1), 3);
+            c.main.emit(Op::Const(x), 4);
+            c.main.emit(Op::Const(y), 4);
+            c.main.emit(Op::Call { name: add, argc: 2 }, 4);
+            c.main.emit(Op::Print(1), 4);
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "3\n30\n");
+    }
+
+    /// §2, no closures: a body sees globals and its **own** locals, never the
+    /// caller's. `main` holds 7 in its own slot 0 and calls `f(1)`; `f` reads
+    /// slot 0 and a global. If the callee's frame were not rebased it would see
+    /// the caller's 7 and print 12.
+    #[test]
+    fn machine_a_body_sees_globals_and_its_own_locals_not_the_callers() {
         let c = chunk(|c| {
             let f = c.add_name("f");
+            let g = c.add_name("g");
+            let five = c.add_const(Value::Int(5));
+            let seven = c.add_const(Value::Int(7));
+            let one = c.add_const(Value::Int(1));
+            c.add_function(func("f", 1, |code| {
+                code.emit(Op::GetGlobal(g), 1);
+                code.emit(Op::GetLocal(0), 1);
+                code.emit(Op::Add, 1);
+                code.emit(Op::Return, 1);
+            }));
+            c.main.emit(Op::Const(five), 2);
+            c.main.emit(Op::DefineGlobal(g), 2);
+            c.main.emit(Op::Const(seven), 3); // main's own slot 0
+            c.main.emit(Op::Const(one), 4);
+            c.main.emit(Op::Call { name: f, argc: 1 }, 4);
+            c.main.emit(Op::Print(1), 4);
+            c.main.emit(Op::Pop, 5); // leaving the block pops main's local
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "6\n");
+    }
+
+    /// A function with no `return`: the compiler ends every body with
+    /// `Const(nil); Return`, so the call yields `Nil`.
+    #[test]
+    fn machine_a_function_without_a_return_yields_nil() {
+        let c = chunk(|c| {
+            let f = c.add_name("f");
+            let nil = c.add_const(Value::Nil);
+            let one = c.add_const(Value::Int(1));
+            c.add_function(func("f", 0, |code| {
+                code.emit(Op::Const(one), 1);
+                code.emit(Op::Print(1), 1);
+                code.emit(Op::Const(nil), 2);
+                code.emit(Op::Return, 2);
+            }));
             c.main.emit(Op::Call { name: f, argc: 0 }, 5);
+            c.main.emit(Op::Print(1), 5);
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "1\nnil\n");
+    }
+
+    /// `fn f(n) { if n == 0 { <extra> return 0; } return f(n - 1); }` and
+    /// `print f(start);`. The recursive call is on **line 3**, the top-level one
+    /// on line 9 and `extra` on line 4, so a test can tell which call failed.
+    /// `extra` interns whatever it needs and returns the instructions to run in
+    /// the base case, at depth `start + 1`.
+    fn countdown(start: i64, extra: impl FnOnce(&mut Chunk) -> Vec<(Op, u32)>) -> Chunk {
+        let mut c = Chunk::new();
+        let extra = extra(&mut c);
+        let zero = c.add_const(Value::Int(0));
+        let one = c.add_const(Value::Int(1));
+        let n = c.add_const(Value::Int(start));
+        let f = c.add_name("f");
+        c.add_function(func("f", 1, |code| {
+            code.emit(Op::GetLocal(0), 2);
+            code.emit(Op::Const(zero), 2);
+            code.emit(Op::Eq, 2);
+            let els = code.emit_jump(Op::JumpIfFalse, 2);
+            for (op, line) in extra {
+                code.emit(op, line);
+            }
+            code.emit(Op::Const(zero), 2);
+            code.emit(Op::Return, 2);
+            code.patch_jump(els);
+            code.emit(Op::GetLocal(0), 3);
+            code.emit(Op::Const(one), 3);
+            code.emit(Op::Sub, 3);
+            code.emit(Op::Call { name: f, argc: 1 }, 3);
+            code.emit(Op::Return, 3);
+        }));
+        c.main.emit(Op::Const(n), 9);
+        c.main.emit(Op::Call { name: f, argc: 1 }, 9);
+        c.main.emit(Op::Print(1), 9);
+        c
+    }
+
+    /// §6/`.36`, the pinned edge: the counted quantity is **active
+    /// invocations**, `main` is depth 0 and is not one, and the check is
+    /// `depth == MAX_DEPTH` at the call site — so a chain of exactly
+    /// `MAX_DEPTH` invocations succeeds and the next call fails, at the failing
+    /// **call's** line. The frames are heap-allocated, so 1000 of them cost the
+    /// test thread nothing.
+    #[test]
+    fn machine_recurses_to_the_depth_limit_and_fails_on_the_next_call() {
+        // f(999) is invocation 1 ... f(0) is invocation 1000.
+        let c = countdown((MAX_DEPTH - 1) as i64, |_| vec![]);
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "0\n");
+
+        // One deeper: the 1001st invocation is refused by the recursive call on
+        // line 3, not by the top-level call on line 9.
+        let c = countdown(MAX_DEPTH as i64, |_| vec![]);
+        assert_eq!(
+            run(&c).to_string(),
+            format!("{}\n", TreadleError::recursion_limit(3))
+        );
+    }
+
+    /// Wrong argument count is a `Type` error naming both counts, from
+    /// `error.rs` — `add expects 2 arguments, got 1`.
+    #[test]
+    fn machine_wrong_argument_count_is_a_type_error_naming_both_counts() {
+        let c = chunk(|c| {
+            let add = c.add_name("add");
+            let one = c.add_const(Value::Int(1));
+            c.add_function(func("add", 2, |code| {
+                code.emit(Op::GetLocal(0), 1);
+                code.emit(Op::Return, 1);
+            }));
+            c.main.emit(Op::Const(one), 4);
+            c.main.emit(Op::Call { name: add, argc: 1 }, 4);
+            c.main.emit(Op::Print(1), 4);
         });
         assert_eq!(c.validate(), Ok(()));
         assert_eq!(
             run(&c).to_string(),
+            format!("{}\n", TreadleError::wrong_arity(4, "add", 2, 1))
+        );
+    }
+
+    /// The observable consequence of arity (c) preceding depth (d): a
+    /// wrong-arity call made *at* the limit reports the arity error. If the two
+    /// checks were swapped this would say `recursion limit`.
+    #[test]
+    fn machine_wrong_arity_at_the_depth_limit_reports_the_arity_error() {
+        let c = countdown((MAX_DEPTH - 1) as i64, |c| {
+            let g = c.add_name("g");
+            let nil = c.add_const(Value::Nil);
+            c.add_function(func("g", 1, |code| {
+                code.emit(Op::Const(nil), 1);
+                code.emit(Op::Return, 1);
+            }));
+            vec![(Op::Call { name: g, argc: 0 }, 4), (Op::Pop, 4)]
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(
+            run(&c).to_string(),
+            format!("{}\n", TreadleError::wrong_arity(4, "g", 1, 0))
+        );
+    }
+
+    /// §6/`.36`: builtins are not invocations. This calls `len` at depth
+    /// `MAX_DEPTH` — if a builtin consumed depth, or were checked against the
+    /// limit at all, it would be a `recursion limit` error instead of `4`.
+    #[test]
+    fn machine_builtins_consume_no_depth() {
+        let c = countdown((MAX_DEPTH - 1) as i64, |c| {
+            let len = c.add_name("len");
+            let s = c.add_const(Value::str("abcd"));
+            vec![
+                (Op::Const(s), 4),
+                (Op::Call { name: len, argc: 1 }, 4),
+                (Op::Return, 4),
+            ]
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "4\n");
+    }
+
+    /// The three builtins (§2), which are reserved names and so resolve before
+    /// the function table. Their errors are `error.rs` constructors like every
+    /// other.
+    #[test]
+    fn machine_builtins_are_len_str_and_int() {
+        // `print <builtin>(v);` with the call on line 2.
+        let call1 = |name: &str, v: Value| {
+            let c = chunk(|c| {
+                let b = c.add_name(name);
+                let i = c.add_const(v);
+                c.main.emit(Op::Const(i), 2);
+                c.main.emit(Op::Call { name: b, argc: 1 }, 2);
+                c.main.emit(Op::Print(1), 2);
+            });
+            assert_eq!(c.validate(), Ok(()));
+            run(&c).to_string()
+        };
+
+        // len is BYTES, not characters: "hé" is three.
+        assert_eq!(call1("len", Value::str("hé")), "3\n");
+        assert_eq!(call1("len", Value::str("")), "0\n");
+        // str is §3's one display form, the same one `print` uses.
+        assert_eq!(call1("str", Value::Nil), "nil\n");
+        assert_eq!(call1("str", Value::Int(-12)), "-12\n");
+        assert_eq!(call1("str", Value::Bool(true)), "true\n");
+        // int is exactly `parse::<i64>()`.
+        assert_eq!(call1("int", Value::str("-12")), "-12\n");
+        assert_eq!(
+            call1("int", Value::str("x")),
+            format!("{}\n", TreadleError::bad_int(2, "x"))
+        );
+        assert_eq!(
+            call1("int", Value::str(" 1")),
+            format!("{}\n", TreadleError::bad_int(2, " 1"))
+        );
+        // The wrong argument type, and the wrong argument count.
+        assert_eq!(
+            call1("len", Value::Int(1)),
             format!(
                 "{}\n",
-                TreadleError::internal(5, "call is not implemented yet")
+                TreadleError::unary_type_mismatch(2, "len", "Str", "Int")
+            )
+        );
+        assert_eq!(
+            call1("int", Value::Nil),
+            format!(
+                "{}\n",
+                TreadleError::unary_type_mismatch(2, "int", "Str", "Nil")
+            )
+        );
+        let two_args = chunk(|c| {
+            let len = c.add_name("len");
+            let s = c.add_const(Value::str("ab"));
+            c.main.emit(Op::Const(s), 6);
+            c.main.emit(Op::Const(s), 6);
+            c.main.emit(Op::Call { name: len, argc: 2 }, 6);
+            c.main.emit(Op::Print(1), 6);
+        });
+        assert_eq!(
+            run(&two_args).to_string(),
+            format!("{}\n", TreadleError::wrong_arity(6, "len", 1, 2))
+        );
+    }
+
+    /// §2: functions are hoisted, and §6/`.35` resolves a callee by name when
+    /// the `Call` executes — so a call emitted *before* the function exists
+    /// works, and a call to a name that never gets one is a runtime `Name`
+    /// error with everything printed before it intact.
+    #[test]
+    fn machine_calls_a_function_declared_after_the_call_site() {
+        let mut c = Chunk::new();
+        let f = c.add_name("f");
+        let one = c.add_const(Value::Int(1));
+        c.main.emit(Op::Call { name: f, argc: 0 }, 1);
+        c.main.emit(Op::Print(1), 1);
+        // ... and only now does `f` exist.
+        c.add_function(func("f", 0, |code| {
+            code.emit(Op::Const(one), 4);
+            code.emit(Op::Return, 4);
+        }));
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "1\n");
+
+        let c = chunk(|c| {
+            let nope = c.add_name("nope");
+            let one = c.add_const(Value::Int(1));
+            c.main.emit(Op::Const(one), 1);
+            c.main.emit(Op::Print(1), 1);
+            c.main.emit(
+                Op::Call {
+                    name: nope,
+                    argc: 0,
+                },
+                2,
+            );
+            c.main.emit(Op::Print(1), 2);
+        });
+        assert_eq!(
+            run(&c).to_string(),
+            format!("1\n{}\n", TreadleError::undefined_function(2, "nope"))
+        );
+    }
+
+    /// Mutual recursion: `even`/`odd` call each other, so every frame's code
+    /// comes from a different function and the frame stack — not a single
+    /// callee — is what carries the state.
+    #[test]
+    fn machine_mutual_recursion_alternates_between_two_functions() {
+        let c = chunk(|c| {
+            let (even, odd) = (c.add_name("even"), c.add_name("odd"));
+            let zero = c.add_const(Value::Int(0));
+            let one = c.add_const(Value::Int(1));
+            let four = c.add_const(Value::Int(4));
+            let t = c.add_const(Value::Bool(true));
+            let fa = c.add_const(Value::Bool(false));
+            // fn even(n) { if n == 0 { return true; } return odd(n - 1); }
+            let base = |code: &mut Code, answer: u32, other: u32, line: u32| {
+                code.emit(Op::GetLocal(0), line);
+                code.emit(Op::Const(zero), line);
+                code.emit(Op::Eq, line);
+                let els = code.emit_jump(Op::JumpIfFalse, line);
+                code.emit(Op::Const(answer), line);
+                code.emit(Op::Return, line);
+                code.patch_jump(els);
+                code.emit(Op::GetLocal(0), line);
+                code.emit(Op::Const(one), line);
+                code.emit(Op::Sub, line);
+                code.emit(
+                    Op::Call {
+                        name: other,
+                        argc: 1,
+                    },
+                    line,
+                );
+                code.emit(Op::Return, line);
+            };
+            c.add_function(func("even", 1, |code| base(code, t, odd, 1)));
+            c.add_function(func("odd", 1, |code| base(code, fa, even, 2)));
+            c.main.emit(Op::Const(four), 5);
+            c.main.emit(
+                Op::Call {
+                    name: even,
+                    argc: 1,
+                },
+                5,
+            );
+            c.main.emit(Op::Print(1), 5);
+            c.main.emit(Op::Const(four), 6);
+            c.main.emit(Op::Call { name: odd, argc: 1 }, 6);
+            c.main.emit(Op::Print(1), 6);
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "true\nfalse\n");
+    }
+
+    /// `Return` from inside a loop inside an `if`: the frame goes away whatever
+    /// the `ip` was doing and whatever the body left on the stack, and the
+    /// caller resumes past its own `Call` — the loop advanced `ip` before
+    /// executing, so there is no return address to fix up.
+    #[test]
+    fn machine_returns_from_inside_nested_jumps() {
+        let c = chunk(|c| {
+            let f = c.add_name("f");
+            let zero = c.add_const(Value::Int(0));
+            let one = c.add_const(Value::Int(1));
+            let three = c.add_const(Value::Int(3));
+            let answer = c.add_const(Value::Int(42));
+            let nil = c.add_const(Value::Nil);
+            let t = c.add_const(Value::Bool(true));
+            // fn f(n) { while true { if n == 0 { return 42; } n = n - 1; } }
+            c.add_function(func("f", 1, |code| {
+                let top = code.len();
+                code.emit(Op::Const(t), 1);
+                let exit = code.emit_jump(Op::JumpIfFalse, 1);
+                code.emit(Op::GetLocal(0), 2);
+                code.emit(Op::Const(zero), 2);
+                code.emit(Op::Eq, 2);
+                let skip = code.emit_jump(Op::JumpIfFalse, 2);
+                code.emit(Op::Const(answer), 3);
+                code.emit(Op::Return, 3);
+                code.patch_jump(skip);
+                code.emit(Op::GetLocal(0), 4);
+                code.emit(Op::Const(one), 4);
+                code.emit(Op::Sub, 4);
+                code.emit(Op::SetLocal(0), 4);
+                code.emit_jump_to(Op::Jump, top, 1);
+                code.patch_jump(exit);
+                code.emit(Op::Const(nil), 6);
+                code.emit(Op::Return, 6);
+            }));
+            c.main.emit(Op::Const(three), 8);
+            c.main.emit(Op::Call { name: f, argc: 1 }, 8);
+            c.main.emit(Op::Print(1), 8);
+        });
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(run(&c).to_string(), "42\n");
+    }
+
+    /// `return` outside a function is a `Parse` error (§2), so a `Return` in
+    /// `main` is a broken chunk — and like every other broken chunk it fails
+    /// instead of popping the last frame out from under the loop.
+    #[test]
+    fn machine_return_at_the_top_level_is_an_internal_error() {
+        let c = chunk(|c| {
+            let one = c.add_const(Value::Int(1));
+            c.main.emit(Op::Const(one), 1);
+            c.main.emit(Op::Return, 1);
+        });
+        assert_eq!(
+            run(&c).to_string(),
+            format!(
+                "{}\n",
+                TreadleError::internal(1, "return outside of a function")
             )
         );
     }
