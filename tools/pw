@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# pw — pact/bd wrapper. Run 6 instrumentation.
+#
+# Run 5 learned that `bd close` fails silently under fleet load, and that
+# `pact msg send --body-file -` can hang, only because two agents happened to
+# mention it in prose. This makes the harness a measured subject instead: every
+# invocation appends one JSON line with the command, wall-time, exit code and
+# a stderr excerpt.
+#
+# Usage:  pw pact lease acquire foo --note "..."
+#         pw bd close treadle-x --reason "..."
+#
+# The log is append-only and one line per call, mirroring pact's own logs.
+# It is per-agent, so 50 agents do not contend on it.
+set -uo pipefail
+
+AGENT="${PACT_AGENT:-unknown}"
+LOGDIR="/home/chussenot/Documents/quern/.harness"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/$AGENT.jsonl"
+
+start=$(date +%s.%N)
+err=$(mktemp)
+"$@" 2> >(tee "$err" >&2)
+rc=$?
+end=$(date +%s.%N)
+
+dur=$(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.3f", b-a}')
+# first 200 chars of stderr, JSON-escaped enough for one line
+tail_err=$(head -c 200 "$err" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
+rm -f "$err"
+
+cmd=$(printf '%s ' "$@" | sed 's/\\/\\\\/g; s/"/\\"/g; s/ $//')
+printf '{"at":"%s","agent":"%s","tool":"%s","argv":"%s","secs":%s,"exit":%s,"stderr":"%s"}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$AGENT" "$1" "$cmd" "$dur" "$rc" "$tail_err" >> "$LOG"
+
+exit $rc

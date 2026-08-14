@@ -1,0 +1,17 @@
+[package]
+name = "treadle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+rand = "0.8"
+
+[[bin]]
+name = "treadle"
+path = "src/main.rs"
+
+[lib]
+name = "treadle"
+path = "src/lib.rs"
