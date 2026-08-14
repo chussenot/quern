@@ -297,7 +297,10 @@ and true;
 ```
 
 **Normative: the error reports the line of the FAILING OPERAND**, not the line
-of the `Binary` node. So the example above reports line 1, where the `1` is.
+of the `Binary` node — where the operand has a line of its own. In the example
+above the failing operand is the literal `1`, which by the fallback below
+reports the **enclosing** node's line, line 2. Had it been a variable, it would
+report line 1.
 
 **With one necessary fallback (bead `.pqj`).** The frozen `Expr::Lit(Value)`
 carries **no line**, so a literal operand has no line of its own and the rule

@@ -3,11 +3,14 @@
 # before it is kept (§3), which is what makes this a two-part assertion rather
 # than just "it errored".
 #
-# Name wording from bead .39's table; see bd_30-agents-2jk.55.
+# Wording is error.rs's `assign_unbound`, which is deliberately distinct from a
+# bad READ (`undefined variable`) so the two failures are tellable apart. This
+# case originally cited bead .39's table, which §6a/.55 superseded; corrected
+# under bead .71 after group B graded 130/131 and this was the one failure.
 --- source
 print "before";
 y = 1;
 print "never";
 --- expect
 before
-error: Name at line 2: undefined variable 'y'
+error: Name at line 2: assignment to undefined variable 'y'
