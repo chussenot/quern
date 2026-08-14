@@ -11,3 +11,35 @@
 {"at":"2026-08-14T08:12:42Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.404,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:12:59Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.407,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:13:09Z","agent":"close-auditor","tool":"pact","argv":"pact audit --help","secs":0.013,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:14:14Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.393,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:14:50Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.356,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:14:51Z","agent":"close-auditor","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.261,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:15:00Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.398,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:15:30Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.399,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:16:06Z","agent":"close-auditor","tool":"pact","argv":"pact agents","secs":0.044,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:16:06Z","agent":"close-auditor","tool":"pact","argv":"pact msg send --to lexer --to-owner-of treadle/src/front/token.rs --subject probe probe","secs":0.043,"exit":0,"stderr":"note: treadle/src/front/token.rs resolved to token, last seen 3m32s ago "}
+{"at":"2026-08-14T08:16:46Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.781,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:17:06Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.409,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:18:01Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.394,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:17Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.340,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:32Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.361,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:21:47Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.336,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:23:04Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":1.169,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:23:27Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.336,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:23:35Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.413,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:24:10Z","agent":"close-auditor","tool":"bd","argv":"bd show multi  line arg \"quoted\" \\backslash","secs":0.302,"exit":1,"sigpipe":false,"stderr":"Error fetching multi  line	arg \"quoted\" \\backslash: no issue found matching \"multi\\n\\nline\\targ \\\"quoted\\\" \\\\backslash\" "}
+{"at":"2026-08-14T08:24:19Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.403,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:24:25Z","agent":"close-auditor","tool":"bd","argv":"bd show alpha  beta","secs":0.291,"exit":1,"sigpipe":false,"stderr":"Error fetching alpha  beta: no issue found matching \"alpha\\n\\nbeta\" "}
+{"at":"2026-08-14T08:24:25Z","agent":"close-auditor","tool":"bd","argv":"bd show alpha beta","secs":0.280,"exit":1,"sigpipe":false,"stderr":"Error fetching alpha	beta: no issue found matching \"alpha\\tbeta\" "}
+{"at":"2026-08-14T08:24:25Z","agent":"close-auditor","tool":"bd","argv":"bd show alpha \"q\" beta","secs":0.259,"exit":1,"sigpipe":false,"stderr":"Error fetching alpha \"q\" beta: no issue found matching \"alpha \\\"q\\\" beta\" "}
+{"at":"2026-08-14T08:24:26Z","agent":"close-auditor","tool":"bd","argv":"bd show alpha \\beta","secs":0.257,"exit":1,"sigpipe":false,"stderr":"Error fetching alpha \\beta: no issue found matching \"alpha \\\\beta\" "}
+{"at":"2026-08-14T08:25:02Z","agent":"close-auditor","tool":"pact","argv":"pact audit --check commit-correlation --since 60m","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:35Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.398,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:46Z","agent":"close-auditor","tool":"pact","argv":"pact audit --check commit-correlation","secs":0.032,"exit":1,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:26:10Z","agent":"close-auditor","tool":"bd","argv":"bd create --type=bug -p 2 --parent=bd_30-agents-2jk -l audit,harness,treadle --title=treadle(harness): tools/pw still writes raw TAB into the stderr field, so the record is invalid JSON --description=RESIDUAL after 9a75b59. That commit fixed argv (tr '\\n\\r\\t' '   ') but left the stderr field on the older filter: tools/pw line 30 is    tail_err=$(head -c 200 \"$err\" | tr '\\n' ' ' | sed 's/\\\\/\\\\\\\\/g;","secs":0.778,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:26:34Z","agent":"close-auditor","tool":"bd","argv":"bd create --type=bug -p 2 --parent=bd_30-agents-2jk -l audit,harness,treadle --title=treadle(harness): the pw log schema changed mid-run, unannounced, and tools/pw was committed with no lease ever held on it --description=Found by close-auditor auditing the orchestrator (bd_30-agents-2jk.5). No false claim is involved — 9a75b59 is a good fix and bd_30-agents-lpo's close reason checks out. Two co","secs":1.654,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:26:50Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.435,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:27:12Z","agent":"close-auditor","tool":"pact","argv":"pact msg send --to orchestrator --subject audit pass 3: 51 claims, 0 false — but 2 P2s on tools/pw, one of them about your lease discipline --body-file /tmp/claude-1000/-home-chussenot-Documents-quern/88480c5c-797a-4031-aa75-8f9e6a2f758c/scratchpad/audit-msg-1.md","secs":0.059,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:27:22Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.423,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:28:06Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":1.271,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:29:22Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.438,"exit":0,"sigpipe":false,"stderr":""}

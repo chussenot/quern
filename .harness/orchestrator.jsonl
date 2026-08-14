@@ -3,3 +3,12 @@
 {"at":"2026-08-14T08:01:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:09:06Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:13:48Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire docs/treadle.md --note token found = missing from the lexical surface; pinning it as a statement-only token --ttl 900","secs":0.041,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:14:11Z","agent":"orchestrator","tool":"pact","argv":"pact lease release docs/treadle.md","secs":0.022,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:18:56Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.013,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.038,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls --json","secs":0.059,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:22:44Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:27:22Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:27:22Z","agent":"orchestrator","tool":"pact","argv":"pact audit --since 2026-08-14T08:09:06Z","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:28:25Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire tools/pw --note bead .47: residual raw TAB/CR in the stderr field makes records unparseable; leasing this time per bead .48 --ttl 900","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:29:49Z","agent":"orchestrator","tool":"pact","argv":"pact msg send --to harness-report --to close-auditor --subject tools/pw log schema changed twice mid-run: three versions, 13 invalid records, all enumerated --body-file /tmp/claude-1000/-home-chussenot-Documents-quern/88480c5c-797a-4031-aa75-8f9e6a2f758c/scratchpad/schema.md","secs":0.043,"exit":0,"sigpipe":false,"stderr":"warning: no agent named \"harness-report\" has acted in this repo (no lease, no message sent) (sending anyway) "}

@@ -1,0 +1,21 @@
+{"at":"2026-08-14T08:18:06Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.032,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:18:09Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:26Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.031,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:35Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.027,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:38Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.012,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:55Z","agent":"error","tool":"bd","argv":"bd update bd_30-agents-2jk.2 --claim","secs":0.396,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:55Z","agent":"error","tool":"bd","argv":"bd show bd_30-agents-2jk.2","secs":0.570,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:59Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.030,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:36Z","agent":"error","tool":"pact","argv":"pact msg send --to lexer --body-file /tmp/error-to-lexer.txt","secs":0.046,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:52Z","agent":"error","tool":"pact","argv":"pact lease acquire treadle/src/error.rs --note FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports it)","secs":0.019,"exit":2,"stderr":"note: `pact watch add treadle/src/error.rs` and pact will tell you when lexer releases it, instead of you asking again error: lease on treadle/src/error.rs is held by lexer on branch agent/lexer in wo"}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact watch add treadle/src/value.rs","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact watch add docs/treadle.md","secs":0.058,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.047,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:35Z","agent":"error","tool":"pact","argv":"pact lease acquire treadle/src/error.rs --note FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports Result/TreadleError)","secs":0.033,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/error.rs was last released by lexer (1m2s ago) — their note: error.rs is an empty stub and bead .2 is unclaimed; adding ONLY the §3 frozen enum + Result verbatim so the crate comp"}
+{"at":"2026-08-14T08:25:43Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:51Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-4b0afc2a8187b45b","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:58Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-4b0afc2a8187b45b","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:28:01Z","agent":"error","tool":"pact","argv":"pact agents","secs":0.061,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:28:16Z","agent":"error","tool":"pact","argv":"pact msg send --to value --to output --to lexer --to parser-expr --to parser-stmt --to opcode --to machine-core --to machine-calls --to env --to eval-expr --to eval-stmt --to conform-runner --to differential-fuzzer --body-file /tmp/error-broadcast.txt","secs":0.083,"exit":0,"sigpipe":false,"stderr":"warning: no agent named \"output\" has acted in this repo (no lease, no message sent) (sending anyway) warning: no agent named \"parser-expr\" has acted in this repo (no lease, no message sent) (sending a"}
+{"at":"2026-08-14T08:28:52Z","agent":"error","tool":"pact","argv":"pact msg send --to lexer --thread pact-msg-e17779d3363c8cc1 --body-file /tmp/error-to-lexer-2.txt","secs":0.119,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:29:21Z","agent":"error","tool":"pact","argv":"pact msg send --to value --thread pact-msg-2a87e5aa14231ad0 --body-file /tmp/error-to-value.txt","secs":0.055,"exit":0,"sigpipe":false,"stderr":""}
