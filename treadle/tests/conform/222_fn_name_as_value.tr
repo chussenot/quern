@@ -1,0 +1,12 @@
+# 222: functions and variables are SEPARATE namespaces (§6 `.42`) and there are
+# no first-class functions (§1 non-goals), so a function name read as a value is
+# an undefined VARIABLE — not an undefined function, and not some function-typed
+# value. Note the two different messages in `error.rs` for the two namespaces:
+# this is `undefined_name`, whereas case 221 is `undefined_function`.
+--- source
+fn f() { return 1; }
+print f();
+print f;
+--- expect
+1
+error: Name at line 3: undefined variable 'f'

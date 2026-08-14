@@ -1,0 +1,15 @@
+# 223: the other half of two namespaces (§6 `.42`) — a `fn` and a `let` may
+# share a name and both stay reachable. `dup` in value position is the variable;
+# `dup(...)` in call position is the function; and `dup(dup)` uses both in one
+# expression. An engine with one symbol table would lose whichever came second.
+# (A duplicate `fn` name IS a Parse error, but that is a parser case, not this.)
+--- source
+fn dup(a) { return a * 2; }
+let dup = 5;
+print dup;
+print dup(dup);
+print dup(3);
+--- expect
+5
+10
+6

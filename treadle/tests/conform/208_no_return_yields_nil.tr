@@ -1,0 +1,20 @@
+# 208: "A function with no `return` returns Nil" (§2), displayed as `nil` by the
+# one `Display for Value` (§3). Three shapes that all fall off the end: an empty
+# body, a body that ends in a statement, and a body whose `if` was not taken.
+# Note the interleaving — `prints` emits its own line before the outer `print`
+# appends `nil`, because a `print` appends its line only after every argument
+# has been evaluated (§6 `.33`).
+--- source
+fn empty() { }
+fn prints() { print "side effect"; }
+fn skipped(n) { if n > 0 { return "positive"; } }
+print empty();
+print prints();
+print skipped(1);
+print skipped(-1);
+--- expect
+nil
+side effect
+nil
+positive
+nil

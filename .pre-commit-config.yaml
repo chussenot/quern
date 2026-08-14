@@ -3,7 +3,17 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # `treadle/tests/conform/*.tr` is excluded from both whitespace fixers
+      # (bead .34). A `.tr` file's `--- expect` section is compared to
+      # `Display for Output` BYTE FOR BYTE, so its trailing bytes are the
+      # assertion, not formatting: a case whose last printed value is an empty
+      # string legitimately ends a line with a tab, and one asserting empty
+      # output legitimately has nothing after `--- expect`. Either fixer would
+      # silently rewrite the assertion into a different, still-passing-looking
+      # one — the failure mode being that the corpus stops testing what it says.
       - id: trailing-whitespace
+        exclude: '^treadle/tests/conform/.*\.tr$'
       - id: end-of-file-fixer
+        exclude: '^treadle/tests/conform/.*\.tr$'
       - id: check-yaml
       - id: check-added-large-files

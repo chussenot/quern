@@ -1,0 +1,18 @@
+# 213: naive recursive fibonacci — two recursive calls inside one expression, so
+# it also exercises §6 `.33`: `lhs` completely, side effects included, before
+# `rhs` is touched. fib(20) is 6765 and costs 13529 invocations, none of them
+# more than 20 deep, so it is nowhere near the recursion limit.
+--- source
+fn fib(n) {
+  if n < 2 { return n; }
+  return fib(n - 1) + fib(n - 2);
+}
+print fib(0);
+print fib(1);
+print fib(7);
+print fib(20);
+--- expect
+0
+1
+13
+6765

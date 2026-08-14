@@ -1,0 +1,17 @@
+# 231: mutual recursion is bounded by the same single counter — an alternating
+# cycle does not get one budget per function. `a(499)` produces 1 + 2*499 = 999
+# active invocations: `a(499)` first, then `b(j)` and `a(j)` for j from 498 down
+# to 0, with `a(0)` the 999th, taking the base case and returning without a
+# call. One under the limit, so it succeeds.
+# Paired with 232, which is the same cycle one step longer.
+--- source
+fn a(n) {
+  if n == 0 { return 0; }
+  return b(n - 1);
+}
+fn b(n) {
+  return a(n);
+}
+print a(499);
+--- expect
+0

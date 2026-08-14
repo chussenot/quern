@@ -1,0 +1,26 @@
+# 210: `return` from inside two nested `while` loops leaves the function
+# outright — not just the inner loop. treadle has no standalone block statement
+# (the frozen §3 `Stmt` has no `Block` variant), so "nested blocks" here are the
+# braced bodies of `while` and `if`, three deep at the `return`.
+# The second call takes the fall-through `return -1;` instead, proving the loops
+# did terminate normally. Both loops are counter-bounded (§6 `.43`).
+--- source
+fn find(limit) {
+  let i = 0;
+  while i < limit {
+    let j = 0;
+    while j < limit {
+      if i * j == 6 {
+        return i * 100 + j;
+      }
+      j = j + 1;
+    }
+    i = i + 1;
+  }
+  return -1;
+}
+print find(10);
+print find(2);
+--- expect
+106
+-1

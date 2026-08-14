@@ -1,0 +1,22 @@
+# 230: the limit counts ACTIVE invocations, not total calls ever made (§6
+# `.36`). 3000 sequential calls each enter at depth 1 and return before the
+# next one starts, so the depth never passes 2 and nothing is refused. An engine
+# that counted calls cumulatively, or that forgot to decrement on return, would
+# fail at the 1000th iteration — which is the mirror image of 225's off-by-one
+# and just as invisible without a case.
+# The loop is counter-bounded (§6 `.43`); treadle has no step or time limit and
+# neither engine may invent one.
+--- source
+fn tick(n) { return n + 1; }
+fn run(n) {
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    acc = tick(acc);
+    i = i + 1;
+  }
+  return acc;
+}
+print run(3000);
+--- expect
+3000

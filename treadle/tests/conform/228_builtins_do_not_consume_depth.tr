@@ -1,0 +1,14 @@
+# 228: "Builtins do not consume depth" (§6 `.36`), asserted exactly AT the
+# boundary rather than somewhere safe. `down(0)` is invocation #1000 running at
+# depth 1000 — the depth at which case 226 refuses a call — and it calls two of
+# the three builtins there, nested. If either `str` or `len` took a depth slot,
+# its call site would see `depth == error::MAX_DEPTH` and this case would be the
+# recursion-limit error instead of the number 4.
+--- source
+fn down(n) {
+  if n == 0 { return len(str(1234)); }
+  return down(n - 1);
+}
+print down(999);
+--- expect
+4

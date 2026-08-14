@@ -1,0 +1,27 @@
+# 225: THE RECURSION LIMIT, lower half of the boundary — and it is asserted as a
+# PASS, not as an error. §4 calls this "the single most likely place for the two
+# [engines] to diverge", so the boundary is written as a matched pair, 225 and
+# 226, and getting either one off by one is the divergence.
+#
+# §6 `.36` pins the counted quantity as ACTIVE INVOCATIONS, not stack frames:
+#   - the top-level program is depth 0 and is not itself an invocation;
+#   - the check is `depth == error::MAX_DEPTH` at the CALL SITE — after the
+#     arguments are evaluated, after the name resolves, after arity is checked,
+#     and BEFORE the callee's scope exists (step (d) of §6 `.35`);
+#   - so the k-th nested invocation runs at depth k and its own call sites test
+#     `k == 1000`.
+# Therefore a chain of exactly 1000 nested invocations SUCCEEDS.
+#
+# Here `down(999)` is invocation #1 at depth 1, and `down(0)` is invocation
+# #1000 at depth 1000. `down(0)` takes the base case and makes no call at all,
+# so no call site is ever reached while depth is 1000 and nothing is refused.
+# A VM counting heap frames, or a tree-walker incrementing before the check
+# instead of after it, would report the recursion limit here instead of 999.
+--- source
+fn down(n) {
+  if n == 0 { return 0; }
+  return down(n - 1) + 1;
+}
+print down(999);
+--- expect
+999

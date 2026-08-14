@@ -1,0 +1,9 @@
+# 217: wrong arity, too MANY arguments — and the singular. A 1-parameter
+# function says "1 argument", not "1 arguments". §4 makes the wording a
+# contract, which is exactly why the plural lives in one `error.rs` helper
+# instead of at two call sites that would each guess.
+--- source
+fn one(a) { return a; }
+print one(1, 2);
+--- expect
+error: Type at line 2: one expects 1 argument, got 2

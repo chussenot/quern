@@ -1,0 +1,12 @@
+# 203: mutual recursion where BOTH functions are declared after the only call.
+# Hoisting (§2) and a reference cycle at once: `ping` names `pong`, which names
+# `ping` back, and neither exists yet at the line that starts it all.
+--- source
+print ping(3);
+fn ping(n) {
+  if n == 0 { return "done"; }
+  return pong(n - 1);
+}
+fn pong(n) { return ping(n); }
+--- expect
+done

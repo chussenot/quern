@@ -1,0 +1,11 @@
+# 202: a function called BEFORE its declaration in the file. §2: functions are
+# "declared at any scope but hoisted to global", so a program may call a
+# function declared later and the forward reference resolves.
+--- source
+print greet();
+print twice(21);
+fn greet() { return "hi"; }
+fn twice(n) { return n * 2; }
+--- expect
+hi
+42

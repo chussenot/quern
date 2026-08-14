@@ -1,0 +1,24 @@
+# 226: THE RECURSION LIMIT, upper half of the boundary — the 1001st invocation
+# is the one refused. Same program as 225 with one more step: `down(1000)` is
+# invocation #1, `down(1)` is invocation #1000 running at depth 1000, and the
+# call site inside it sees `depth == error::MAX_DEPTH` and refuses to enter
+# #1001. So 226 fails where 225 passes, and the two differ by a single step.
+#
+# The error is a `Value` error (§3, §4) reported at the CALL's line — §6 `.36`
+# says "at the **call's** line", and §6 `.46` says the innermost failing node,
+# never the enclosing statement. That is line 3, not line 5.
+#
+# THE EXACT MESSAGE COMES FROM `error.rs`, not from this file's author: the
+# constructor is `error::recursion_limit(line)`, it takes no limit argument on
+# purpose, and it formats the single `error::MAX_DEPTH` constant so that neither
+# engine can name a different number. Its wording says "frames" even though the
+# counted quantity is invocations; that spelling is `error.rs`'s and is
+# reproduced verbatim here rather than corrected.
+--- source
+fn down(n) {
+  if n == 0 { return 0; }
+  return down(n - 1) + 1;
+}
+print down(1000);
+--- expect
+error: Value at line 3: recursion limit of 1000 frames exceeded

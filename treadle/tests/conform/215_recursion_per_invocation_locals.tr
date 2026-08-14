@@ -1,0 +1,16 @@
+# 215: every invocation gets its OWN parameters and locals. The deeper call's
+# `n` and `rest` do not disturb the shallower one's, so the string comes back
+# assembled in ascending order; an engine that shared one slot per name would
+# produce `55555` or a single digit. `+` on Str is concatenation (§2) and
+# `str`/`len` are two of the only three builtins.
+--- source
+fn digits(n) {
+  if n == 0 { return ""; }
+  let rest = digits(n - 1);
+  return rest + str(n);
+}
+print digits(5);
+print len(digits(9));
+--- expect
+12345
+9

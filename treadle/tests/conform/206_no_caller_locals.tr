@@ -1,0 +1,20 @@
+# 206: NO CLOSURES. §2: "a function body is a scope whose parent is the global
+# scope, never the caller's". This program is built so that it would print 99
+# if — and only if — a callee could see its caller's locals. It must instead
+# fail: `hidden` is a local of `caller` and is invisible inside `peek`.
+#
+# The message is the exact `Display for TreadleError` form over
+# `error.rs::undefined_name`. The line is the failing `Expr::Var` node's own
+# line (§6 `.46`: the innermost node that failed, never the enclosing
+# statement), which is line 2.
+--- source
+fn peek() {
+  return hidden;
+}
+fn caller() {
+  let hidden = 99;
+  return peek();
+}
+print caller();
+--- expect
+error: Name at line 2: undefined variable 'hidden'
