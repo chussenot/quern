@@ -7,3 +7,4 @@
 {"at":"2026-08-14T08:18:56Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.013,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.038,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls --json","secs":0.059,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:22:44Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}

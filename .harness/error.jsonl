@@ -12,3 +12,6 @@
 {"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact watch add docs/treadle.md","secs":0.058,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.047,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:22:35Z","agent":"error","tool":"pact","argv":"pact lease acquire treadle/src/error.rs --note FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports Result/TreadleError)","secs":0.033,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/error.rs was last released by lexer (1m2s ago) — their note: error.rs is an empty stub and bead .2 is unclaimed; adding ONLY the §3 frozen enum + Result verbatim so the crate comp"}
+{"at":"2026-08-14T08:25:43Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:51Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-4b0afc2a8187b45b","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:25:58Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-4b0afc2a8187b45b","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
