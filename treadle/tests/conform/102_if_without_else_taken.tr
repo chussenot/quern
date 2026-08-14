@@ -1,0 +1,11 @@
+# 102 - an else-less if whose condition is true. The statements around it are
+# there so a skipped-or-not-skipped body is visible as a positional change,
+# not just a missing line.
+--- source
+print "before";
+if true { print "inside"; }
+print "after";
+--- expect
+before
+inside
+after

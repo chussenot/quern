@@ -1,0 +1,11 @@
+# 130 - PRECEDENCE with a different KIND of answer if the ladder is wrong:
+# rung 5 (+) binds tighter than rung 3 (==), so this is (1 + 2) == 3 and the
+# answer is true. The wrong grouping, 1 + (2 == 3), is Int + Bool - a Type
+# error, not a different Bool. There is no truthiness and no coercion (§6 .40),
+# so a mis-ordered ladder cannot silently agree here.
+--- source
+print 1 + 2 == 3;
+print "ab" + "c" == "abc";
+--- expect
+true
+true

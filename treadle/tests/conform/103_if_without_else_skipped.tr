@@ -1,0 +1,10 @@
+# 103 - an else-less if whose condition is false. §3: `els` is simply an empty
+# Vec<Stmt>, so there is nothing to run and nothing to emit - not a nil line,
+# not an empty line.
+--- source
+print "before";
+if false { print "inside"; }
+print "after";
+--- expect
+before
+after

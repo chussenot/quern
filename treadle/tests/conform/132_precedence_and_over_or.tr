@@ -1,0 +1,14 @@
+# 132 - PRECEDENCE where the wrong ladder yields the OPPOSITE BOOLEAN, in both
+# directions:
+#   line 1  true or (false and false)  == true   <- correct, and binds tighter
+#           (true or false) and false  == false  <- flat left-to-right
+#   line 2  (false and true) or true   == true   <- correct
+#           false and (true or true)   == false  <- if `or` bound tighter
+# Both lines are true; each is false under a different specific mistake, so the
+# pair distinguishes the correct ladder from either way of getting it wrong.
+--- source
+print true or false and false;
+print false and true or true;
+--- expect
+true
+true

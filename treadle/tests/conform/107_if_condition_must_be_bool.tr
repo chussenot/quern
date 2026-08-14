@@ -1,0 +1,18 @@
+# 107 - §6 (.40): there is no truthiness anywhere. A non-Bool if-condition is
+# a Type error at the condition's line (3, the Var node - §6 .46 says the
+# innermost failing node, never the enclosing statement), and the line printed
+# before it is KEPT (§3: a program that fails at line 9 has the output of
+# lines 1..8 and then the error).
+#
+# Wording is Value::as_bool in the frozen value.rs on master. See bead
+# bd_30-agents-2jk.55: bead .39 proposes "condition must be Bool, found Int"
+# for this case and the two disagree; this file follows the merged frozen file.
+--- source
+let n = 1;
+print "first";
+if n {
+  print "never";
+}
+--- expect
+first
+error: Type at line 3: expected Bool, got Int

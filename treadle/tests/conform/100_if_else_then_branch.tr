@@ -1,0 +1,7 @@
+# 100 - if/else with a true condition: the then-branch runs and the
+# else-branch does not. §2.
+--- source
+let x = 3;
+if x > 2 { print "then"; } else { print "else"; }
+--- expect
+then

@@ -1,0 +1,13 @@
+# 113 - the opposite of 112, and the reason 112 proves anything: with a true
+# left operand the right operand IS evaluated, so f's line lands FIRST (§6
+# .33: lhs completely, side effects included, then rhs), and only then does
+# the enclosing print append exactly one line of its own.
+--- source
+fn f() {
+  print "f called";
+  return true;
+}
+print true and f();
+--- expect
+f called
+true

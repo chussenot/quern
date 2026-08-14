@@ -1,0 +1,16 @@
+# 122 - §2 scoping: a block { } is a scope, and `let` in a nested block shadows
+# the outer binding for the rest of THAT scope only. The outer value is
+# restored on the way out. Stmt has no Block variant (§3), so the only nested
+# scopes in the language are if/else/while bodies and function bodies.
+--- source
+let x = 1;
+print "outer", x;
+if true {
+  let x = 2;
+  print "inner", x;
+}
+print "outer", x;
+--- expect
+outer	1
+inner	2
+outer	1

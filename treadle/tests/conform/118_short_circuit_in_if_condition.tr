@@ -1,0 +1,21 @@
+# 118 - short-circuit inside an if-condition: the guard idiom. probe() is
+# called on exactly the passes where the left operand allowed it, so the count
+# and interleaving of "probe" lines is the assertion. i == 0 decides the
+# and by itself and probe is not called that pass.
+--- source
+fn probe(n) {
+  print "probe", n;
+  return n > 0;
+}
+let i = 0;
+while i < 3 {
+  if i > 0 and probe(i) {
+    print "taken", i;
+  }
+  i = i + 1;
+}
+--- expect
+probe	1
+taken	1
+probe	2
+taken	2

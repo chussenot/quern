@@ -1,0 +1,23 @@
+# 127 - shadowing and assignment interacting, which is where an engine that
+# gets the scope chain subtly wrong diverges. The first block declares its own
+# x, so the assignment that follows hits the INNER binding and the outer
+# survives at 1. The second block declares nothing, so its assignment walks out
+# and the change persists.
+--- source
+let x = 1;
+if true {
+  let x = 10;
+  x = x + 5;
+  print "a", x;
+}
+print "b", x;
+if true {
+  x = x + 5;
+  print "c", x;
+}
+print "d", x;
+--- expect
+a	15
+b	1
+c	6
+d	6

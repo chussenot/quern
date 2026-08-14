@@ -1,0 +1,12 @@
+# 109 - a while loop that runs exactly once: the body makes the condition
+# false before the second test. Distinguishes a while from a do-while.
+--- source
+let i = 0;
+while i < 1 {
+  print "body";
+  i = i + 1;
+}
+print i;
+--- expect
+body
+1

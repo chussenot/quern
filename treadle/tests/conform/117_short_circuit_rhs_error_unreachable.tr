@@ -1,0 +1,13 @@
+# 117 - the stronger form of 116: a skipped right operand cannot fail at all.
+# The divide-by-zero (a Value error) and the undefined function (a Name error)
+# are both unreachable, so the program runs to completion. Note the precedence
+# in the first line: / is rung 6 and == is rung 3, so the rhs is (1 / 0) == 0,
+# a Bool-typed expression that would be well typed and still explode.
+--- source
+print false and 1 / 0 == 0;
+print true or nope();
+print "survived";
+--- expect
+false
+true
+survived

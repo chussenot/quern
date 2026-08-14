@@ -1,0 +1,25 @@
+# 106 - §6 (.46): `else if` chains as els: vec![Stmt::If{..}], and bodies are
+# always braced so there is no dangling else. Exactly one arm of a chain runs;
+# every later arm, including the final else, does not. The second chain falls
+# all the way through to its else.
+--- source
+let n = 2;
+if n == 1 {
+  print "one";
+} else if n == 2 {
+  print "two";
+} else if n == 3 {
+  print "three";
+} else {
+  print "many";
+}
+if n == 9 {
+  print "nine";
+} else if n == 8 {
+  print "eight";
+} else {
+  print "fallthrough";
+}
+--- expect
+two
+fallthrough
