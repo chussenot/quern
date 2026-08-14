@@ -75,18 +75,31 @@ generator run 5 documented.
 
 ### Baseline, measured not assumed
 
-At `a582a5d` (run-6 baseline, all six live agents still on it at pass 1):
+At `a582a5d` (run-6 baseline, all six live agents still on it at pass 1), all
+four gates run by me, not quoted from anyone:
 
 ```
-cargo build   → Finished dev profile, no warnings
-cargo test    → 0 passed; 0 failed  (lib 0, bin 0, doc 0)
+cargo fmt --check                        → clean, exit 0
+cargo build                              → Finished dev profile, no warnings
+cargo clippy --all-targets -- -D warnings → clean, exit 0
+cargo test                               → 0 passed; 0 failed (lib 0, bin 0, doc 0)
 ```
 
-So **any** claim of a nonzero test count is a claim about work that landed
-after the baseline, and "0 passed" in a gate transcript means the author's
-code did not build into the test binary. Recorded here because the run-5
-false-green mode was a test count that could not have included the author's
-own tests.
+The baseline tree is **stubs**: every one of the 18 source files is a 1–16
+line file, 50 lines total across the whole crate, and `src/value.rs` is a
+single doc comment. `#![forbid(unsafe_code)]` is already present at
+`src/lib.rs:6`, so a close reason claiming to have added it is claiming
+something that was already true.
+
+Two consequences I will lean on all run:
+
+1. **Any** claim of a nonzero test count is a claim about work committed after
+   the baseline — and conversely, "0 passed" in a gate transcript means the
+   author's code never reached the test binary. The run-5 false-green mode was
+   a test count that could not have included the author's own tests, so I check
+   the author's *own* test names in the output, not just the total.
+2. Clippy and fmt are clean at the baseline, so "clippy clean" is a claim about
+   the author's own code and nothing else. It cannot be inherited.
 
 ---
 
