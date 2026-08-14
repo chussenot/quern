@@ -46,17 +46,20 @@ use treadle::output::{diff, Output};
 /// Every engine the corpus is graded against.
 ///
 /// **Adding an engine is one line here and nothing else in this file changes.**
-/// Neither engine exists yet (`src/vm/machine.rs` and `src/tree/eval.rs` are
-/// stubs, and nothing in the crate implements [`Engine`]), so the list is empty
-/// and [`every_case_against_every_engine`] is `#[ignore]`d — see the reason on
-/// that test. It also asserts the list is non-empty, so an empty `engines()` can
-/// never masquerade as a green run over zero engines.
+/// [`every_case_against_every_engine`] also asserts the list is non-empty, so an
+/// empty `engines()` can never masquerade as a green run over zero engines.
+///
+/// **Both engines are in**, so the suite now grades them against the corpus and
+/// against **each other**: `tree` (bd `.19`/`.20`) and `vm` (bd `.16`/`.17`).
+// `-D warnings` turns `clippy::vec_init_then_push` into an error. Allowed rather
+// than rewritten to `vec![]`, so that adding an engine stays the one-line change
+// described above; the lint spans the whole `let` + `push`, so the attribute has
+// to sit on the function.
+#[allow(clippy::vec_init_then_push)]
 fn engines() -> Vec<Box<dyn Engine>> {
-    #[allow(unused_mut)]
     let mut engines: Vec<Box<dyn Engine>> = Vec::new();
-    // Uncomment one line per engine as it lands, and drop the `#[ignore]`:
     engines.push(Box::new(treadle::vm::Vm::new())); // bd .16 / .17
-    // engines.push(Box::new(treadle::tree::eval::Interp::new())); // bd .19 / .20
+    engines.push(Box::new(treadle::tree::eval::Eval::new())); // bd .19 / .20
     engines
 }
 
