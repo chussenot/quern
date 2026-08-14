@@ -40,9 +40,29 @@
 //!   operand's**, because §6b pins an `as_bool` failure to the failing operand,
 //!   not to the `Binary` node.
 
-use crate::front::ast::{BinOp, Expr};
+use crate::front::ast::{BinOp, Expr, FnDecl, Program, Stmt};
 use crate::value::Value;
-use crate::vm::opcode::{Chunk, Code, Op};
+use crate::vm::opcode::{Chunk, Code, Function, Op};
+
+/// **The entry point of group A's front-to-back seam**: a whole [`Program`]
+/// becomes a [`Chunk`] the machine can run. Infallible (§6/`.35`).
+///
+/// Functions are defined from [`Program::fns`] — the complete hoisted list —
+/// **before** `main` is compiled, and `Stmt::Fn` is a no-op when walking a
+/// statement list. Doing both would define every function twice; doing neither
+/// would never define one (see `ast.rs`). Hoisting is what makes a call to a
+/// function declared later in the file work, and a `fn` inside a branch that
+/// never runs still callable.
+pub fn compile(program: &Program) -> Chunk {
+    let mut c = Compiler::new();
+    for decl in &program.fns {
+        c.function(decl);
+    }
+    let mut code = Code::new();
+    c.stmts(&mut code, &program.stmts);
+    c.chunk.main = code;
+    c.chunk
+}
 
 /// Compiles an AST into a [`Chunk`]. Infallible by construction (§6/`.35`).
 #[derive(Debug, Default)]
@@ -55,6 +75,14 @@ pub struct Compiler {
     /// first declarations, so they land in slots `0..arity` where `Op::Call`
     /// leaves the arguments.
     locals: Vec<String>,
+    /// How many blocks deep in the frame being compiled. `0` is the frame's own
+    /// top level, and at `0` in `main` — and only there — a `let` is a global
+    /// (§6/`.37`: top-level scope *is* global scope).
+    scope_depth: u32,
+    /// Whether the frame being compiled is a function body rather than `main`.
+    /// A function body cannot create a global (§6/`.37`), so its top level is a
+    /// slot even at depth `0`.
+    in_function: bool,
 }
 
 impl Compiler {
@@ -91,6 +119,162 @@ impl Compiler {
     /// How many locals are live in the frame being compiled.
     pub fn local_count(&self) -> usize {
         self.locals.len()
+    }
+
+    /// Compile a function body into its own [`Code`] and install it in the
+    /// chunk. The parameters are the callee's **first locals**, in order, which
+    /// is exactly where `Op::Call` leaves the arguments (`stack[base + n]`), so
+    /// nothing is moved on entry.
+    ///
+    /// Every body ends in `Const(nil); Return`, so a function with no `return`
+    /// returns `Nil` (§2) and the machine can never run off the end of a frame.
+    /// The body's own locals need no `Pop`: `Return` truncates the stack to
+    /// `frame.base`.
+    fn function(&mut self, decl: &FnDecl) {
+        let mut code = Code::new();
+        self.in_function = true;
+        self.scope_depth = 0;
+        for p in &decl.params {
+            self.declare(p);
+        }
+        self.stmts(&mut code, &decl.body);
+        let nil = self.chunk.add_const(Value::Nil);
+        code.emit(Op::Const(nil), decl.line);
+        code.emit(Op::Return, decl.line);
+        // The next body starts at slot 0.
+        self.drop_locals(self.local_count());
+        self.in_function = false;
+        self.chunk.add_function(Function {
+            name: decl.name.clone(),
+            arity: decl.params.len() as u32,
+            code,
+        });
+    }
+
+    /// Compile a statement list **in the current scope** — a frame's top level.
+    /// A nested block goes through [`Compiler::block`] instead.
+    pub fn stmts(&mut self, code: &mut Code, stmts: &[Stmt]) {
+        for s in stmts {
+            self.stmt(code, s);
+        }
+    }
+
+    /// Compile a braced block: a new scope (§2), and one `Pop` per local it
+    /// declared on the way out.
+    ///
+    /// Missing those `Pop`s would not fail loudly — later `base + n` slots still
+    /// resolve, the stack just grows — so the count comes from the locals table
+    /// rather than from counting `Stmt::Let`s, which would be wrong for a `let`
+    /// in a nested block.
+    fn block(&mut self, code: &mut Code, stmts: &[Stmt], line: u32) {
+        let outer = self.local_count();
+        self.scope_depth += 1;
+        self.stmts(code, stmts);
+        self.scope_depth -= 1;
+        let n = self.local_count() - outer;
+        for _ in 0..n {
+            code.emit(Op::Pop, line);
+        }
+        self.drop_locals(n);
+    }
+
+    /// One statement. Leaves the stack **exactly as it found it**, except for a
+    /// `let` that declares a local, whose initialiser's value *is* the slot.
+    fn stmt(&mut self, code: &mut Code, s: &Stmt) {
+        match s {
+            // §6/`.37`: the initialiser is compiled FIRST and the slot declared
+            // only after, so it is evaluated in the scope as it exists *before*
+            // the new binding — `let x = x + 1;` reads the outer `x`. There is
+            // no `DeclareLocal` op precisely so this holds by construction.
+            Stmt::Let { name, init, line } => {
+                self.expr(code, init, *line);
+                if self.scope_depth == 0 && !self.in_function {
+                    // Top-level scope IS global scope; only `main` can define
+                    // one, and `DefineGlobal` is create-or-replace, so a
+                    // re-`let` at the top level replaces (later wins).
+                    let n = self.chunk.add_name(name);
+                    code.emit(Op::DefineGlobal(n), *line);
+                } else {
+                    // The value the initialiser left on the stack is the slot.
+                    self.declare(name);
+                }
+            }
+            // Assignment never creates a binding: a name that is not a live
+            // local is a global *by name*, and `SetGlobal` is `assign_unbound`
+            // at run time if it does not exist. In a function body that is §2's
+            // "walk outward to the nearest existing binding", the body's parent
+            // being the global scope.
+            Stmt::Assign { name, value, line } => {
+                self.expr(code, value, *line);
+                let op = match self.resolve(name) {
+                    Some(slot) => Op::SetLocal(slot),
+                    None => Op::SetGlobal(self.chunk.add_name(name)),
+                };
+                code.emit(op, *line);
+            }
+            // §6/`.33`: arguments left to right, then ONE `Print` appending
+            // exactly one line — and only if every argument evaluated, which is
+            // automatic here because a failing argument never reaches `Print`.
+            Stmt::Print { args, line } => {
+                for a in args {
+                    self.expr(code, a, *line);
+                }
+                code.emit(Op::Print(args.len() as u32), *line);
+            }
+            // Forward jumps, back-patched. The condition's `JumpIfFalse` carries
+            // the CONDITION's line, not the `if`'s, so a condition on its own
+            // line reports itself (§6/`.46`, §6b) — and it pops the condition on
+            // both paths, so neither arm needs a `Pop`.
+            Stmt::If {
+                cond,
+                then,
+                els,
+                line,
+            } => {
+                let cl = line_of(cond, *line);
+                self.expr(code, cond, cl);
+                let to_else = code.emit_jump(Op::JumpIfFalse, cl);
+                self.block(code, then, *line);
+                if els.is_empty() {
+                    // An else-less `if` needs no jump over an empty else arm.
+                    code.patch_jump(to_else);
+                } else {
+                    let to_end = code.emit_jump(Op::Jump, *line);
+                    code.patch_jump(to_else);
+                    self.block(code, els, *line);
+                    code.patch_jump(to_end);
+                }
+            }
+            // The condition is re-evaluated every iteration, so the loop jumps
+            // BACKWARD to it — `emit_jump_to` with an already-known target,
+            // while the exit is a forward jump patched after the body.
+            Stmt::While { cond, body, line } => {
+                let top = code.len();
+                let cl = line_of(cond, *line);
+                self.expr(code, cond, cl);
+                let to_end = code.emit_jump(Op::JumpIfFalse, cl);
+                self.block(code, body, *line);
+                code.emit_jump_to(Op::Jump, top, *line);
+                code.patch_jump(to_end);
+            }
+            // A bare `return;` is `Const(nil); Return`, so `Return` always finds
+            // its value. No `Pop`s for the scopes being left: `Return` truncates
+            // the stack to `frame.base`.
+            Stmt::Return { value, line } => {
+                match value {
+                    Some(e) => self.expr(code, e, *line),
+                    None => {
+                        let nil = self.chunk.add_const(Value::Nil);
+                        code.emit(Op::Const(nil), *line);
+                    }
+                }
+                code.emit(Op::Return, *line);
+            }
+            // A no-op, emitting NOTHING: the declaration was already compiled
+            // from `Program::fns` (see [`compile`]). Compiling it here as well
+            // would define it twice.
+            Stmt::Fn(_) => {}
+        }
     }
 
     /// Compile `e`, appending to `code`. **Leaves exactly one value on the
@@ -592,6 +776,390 @@ mod tests {
             out.error,
             Some(TreadleError::unary_type_mismatch(2, "-", "Int", "Bool"))
         );
+    }
+
+    // ---- statements, control flow and functions (`.15`) -------------------
+
+    /// Compile a whole program from source. The chunk is `validate`d, so an
+    /// unpatched jump, a stray pool index or a duplicate function name fails
+    /// here as the compiler bug it is rather than as an `internal` error from
+    /// the middle of the machine.
+    fn chunk_of(src: &str) -> Chunk {
+        let program = crate::front::parser::parse(src).expect("test source must parse");
+        // `super::` because the expression tests' own `compile` helper (one
+        // `Expr`, not a `Program`) shadows the free function here.
+        let chunk = super::compile(&program);
+        assert_eq!(chunk.validate(), Ok(()), "compiler produced a bad chunk");
+        chunk
+    }
+
+    fn run_src(src: &str) -> Output {
+        machine::run(&chunk_of(src))
+    }
+
+    /// §6/`.37`, the pinned edge this half exists for: the initialiser is
+    /// evaluated in the scope **as it exists before** the new binding, so the
+    /// `x` in `let x = x + 1;` is the *outer* one. Both forms — a top-level
+    /// `let` (a global) and one in a block (a slot).
+    #[test]
+    fn let_evaluates_its_initialiser_before_the_binding_exists() {
+        // Global form: `DefineGlobal` is create-or-replace, and the `GetGlobal`
+        // is emitted before it, so it reads the old value.
+        let out = run_src("let x = 1;\nlet x = x + 1;\nprint x;\n");
+        assert_eq!(out.lines, ["2"]);
+        assert_eq!(out.error, None);
+
+        // Local form, in a block: the inner `let` gets a NEW slot and the
+        // initialiser resolves to the outer binding — and the outer one is
+        // unchanged after the block.
+        let out = run_src("let x = 1;\nif true { let x = x + 1; print x; }\nprint x;\n");
+        assert_eq!(out.lines, ["2", "1"]);
+
+        // Local form inside a function, twice over: a slot shadowing a slot.
+        // (A bare `{ … }` is not a statement in this grammar — the only blocks
+        // are `if`/`while`/`fn` bodies — so the inner scope is an `if true`.)
+        let out = run_src(
+            "fn f() { let x = 1; if true { let x = x + 1; print x; } print x; }\nprint f();\n",
+        );
+        assert_eq!(out.lines, ["2", "1", "nil"]);
+
+        // And the emission order is the point: initialiser, THEN the binding.
+        let chunk = chunk_of("let x = 1;\n");
+        assert_eq!(chunk.main.ops(), [Op::Const(0), Op::DefineGlobal(0)]);
+    }
+
+    /// Blocks are scopes: a shadowing `let` takes a new slot, and leaving the
+    /// block costs one `Pop` per local declared in it. Missing those `Pop`s
+    /// drifts silently rather than failing, so the shape is pinned here.
+    #[test]
+    fn blocks_shadow_by_slot_and_pop_one_per_local_on_exit() {
+        let chunk = chunk_of(
+            "fn f() { let a = 1; if true { let a = 2; let b = 3; print a, b; } print a; }\n",
+        );
+        let f = chunk.function(0).expect("f is compiled");
+        assert_eq!(
+            f.code.ops(),
+            [
+                Op::Const(0),        // let a = 1     -> slot 0
+                Op::Const(1),        // true
+                Op::JumpIfFalse(10), // past the block AND its Pops
+                Op::Const(2),        // let a = 2     -> slot 1 (shadows)
+                Op::Const(3),        // let b = 3     -> slot 2
+                Op::GetLocal(1),     // print a, b    -> the INNER a
+                Op::GetLocal(2),
+                Op::Print(2),
+                Op::Pop, // leaving the block: two locals, two Pops
+                Op::Pop,
+                Op::GetLocal(0), // print a        -> the outer a again
+                Op::Print(1),
+                Op::Const(4), // the implicit `return nil`
+                Op::Return,
+            ]
+        );
+        assert_eq!(
+            run_src("fn f() { let a = 1; if true { let a = 2; print a; } print a; }\nprint f();\n")
+                .lines,
+            ["2", "1", "nil"]
+        );
+    }
+
+    /// §6/`.37`: re-declaring in the *same* scope is legal and the later `let`
+    /// wins — by slot, with the earlier one still occupying its own.
+    #[test]
+    fn re_declaration_in_one_scope_lets_the_later_let_win() {
+        let chunk = chunk_of("fn f() { let a = 1; let a = 2; print a; }\n");
+        let f = chunk.function(0).expect("f is compiled");
+        assert_eq!(
+            f.code.ops(),
+            [
+                Op::Const(0),
+                Op::Const(1),
+                Op::GetLocal(1), // the later slot, not slot 0
+                Op::Print(1),
+                Op::Const(2),
+                Op::Return,
+            ]
+        );
+        assert_eq!(
+            run_src("fn f() { let a = 1; let a = 2; print a; }\nprint f();\n").lines,
+            ["2", "nil"]
+        );
+    }
+
+    /// §2 hoisting: functions are defined from `Program::fns` before anything
+    /// runs, so one declared *later* in the file is callable, and one inside a
+    /// branch that never runs is callable too. `Stmt::Fn` itself emits nothing —
+    /// compiling it as well would define every function twice.
+    #[test]
+    fn fns_are_hoisted_including_from_a_branch_that_never_runs() {
+        let out = run_src("print later();\nfn later() { return 7; }\n");
+        assert_eq!(out.lines, ["7"]);
+
+        let out = run_src("if false { fn dead() { return 9; } }\nprint dead();\n");
+        assert_eq!(out.lines, ["9"], "a fn in a never-taken branch is callable");
+        assert_eq!(out.error, None);
+
+        // One definition, and no instruction for the declaration itself: the
+        // whole of main here is the `if` (cond, jump, pop nothing) and the print.
+        let chunk = chunk_of("if false { fn dead() { return 9; } }\nprint dead();\n");
+        assert_eq!(chunk.functions().len(), 1);
+        assert_eq!(
+            chunk.main.ops(),
+            [
+                // `Const(2)`, not `Const(0)`: the pool is shared and `dead`'s
+                // body was compiled first, so it already holds 9 and nil.
+                Op::Const(2),       // false
+                Op::JumpIfFalse(2), // the then-block is EMPTY of instructions
+                Op::Call { name: 0, argc: 0 },
+                Op::Print(1),
+            ]
+        );
+        assert_eq!(chunk.constant(2), Some(&Value::Bool(false)));
+    }
+
+    /// `if`/`else` are back-patched **forward** jumps, and an else-less `if`
+    /// emits no jump over an arm that is not there.
+    #[test]
+    fn if_else_back_patches_forward_jumps() {
+        let chunk = chunk_of("if true { print 1; } else { print 2; }\n");
+        assert_eq!(
+            chunk.main.ops(),
+            [
+                Op::Const(0),       // true
+                Op::JumpIfFalse(5), // -> the else arm
+                Op::Const(1),       // print 1
+                Op::Print(1),
+                Op::Jump(7), // -> past the else arm
+                Op::Const(2),
+                Op::Print(1),
+            ]
+        );
+        assert_eq!(
+            run_src("if true { print 1; } else { print 2; }\n").lines,
+            ["1"]
+        );
+        assert_eq!(
+            run_src("if false { print 1; } else { print 2; }\n").lines,
+            ["2"]
+        );
+
+        // Else-less: one forward jump, straight past the body.
+        let chunk = chunk_of("if false { print 1; }\nprint 2;\n");
+        assert_eq!(
+            chunk.main.ops(),
+            [
+                Op::Const(0),
+                Op::JumpIfFalse(4),
+                Op::Const(1),
+                Op::Print(1),
+                Op::Const(2),
+                Op::Print(1),
+            ]
+        );
+        assert_eq!(run_src("if false { print 1; }\nprint 2;\n").lines, ["2"]);
+
+        // `else if` is `els: vec![Stmt::If{..}]` and needs no special case.
+        assert_eq!(
+            run_src("let x = 2;\nif x == 1 { print 1; } else if x == 2 { print 2; } else { print 3; }\n").lines,
+            ["2"]
+        );
+
+        // §6/`.46`, §6b: a non-Bool condition fails at the CONDITION's line, not
+        // at the `if`'s, which is only observable when they differ.
+        let out = run_src("let x = 1;\nif\nx {\nprint 1;\n}\n");
+        assert_eq!(out.error, Some(TreadleError::not_bool(3, "Int")));
+
+        // With §6b's one fallback (bead `.pqj`): a LITERAL condition has no line
+        // of its own, so it reports the enclosing node's — the `if`'s, line 1.
+        let out = run_src("if\n1 {\nprint 1;\n}\n");
+        assert_eq!(out.error, Some(TreadleError::not_bool(1, "Int")));
+    }
+
+    /// A `while` jumps **backward** to its condition, and forward out of it.
+    #[test]
+    fn while_jumps_backward_to_its_condition() {
+        let chunk = chunk_of("let i = 0;\nwhile i < 3 { print i; i = i + 1; }\n");
+        assert_eq!(
+            chunk.main.ops(),
+            [
+                Op::Const(0), // let i = 0
+                Op::DefineGlobal(0),
+                Op::GetGlobal(0), // 2: the loop top — the condition
+                Op::Const(1),
+                Op::Lt,
+                Op::JumpIfFalse(13), // out of the loop, patched after the body
+                Op::GetGlobal(0),    // print i
+                Op::Print(1),
+                Op::GetGlobal(0), // i = i + 1
+                Op::Const(2),
+                Op::Add,
+                Op::SetGlobal(0),
+                Op::Jump(2), // BACKWARD, to re-test the condition
+                             // 13:
+            ]
+        );
+        // The backward jump targets an instruction before itself.
+        assert_eq!(chunk.main.op(12).and_then(Op::jump_target), Some(2));
+        assert_eq!(
+            run_src("let i = 0;\nwhile i < 3 { print i; i = i + 1; }\n").lines,
+            ["0", "1", "2"]
+        );
+
+        // Zero iterations, and a body-local popped on every pass.
+        assert_eq!(run_src("while false { print 1; }\nprint 2;\n").lines, ["2"]);
+        assert_eq!(
+            run_src("let i = 0;\nwhile i < 2 { let d = i * 10; print d; i = i + 1; }\n").lines,
+            ["0", "10"]
+        );
+    }
+
+    /// §2/§6/`.33`: one `print` is one line, tab-separated, and only once every
+    /// argument evaluated — a failing argument leaves no partial line.
+    #[test]
+    fn print_of_several_values_is_one_tab_separated_line() {
+        let out = run_src("print \"a\", 1, true, nil;\n");
+        assert_eq!(out.lines, ["a\t1\ttrue\tnil"]);
+        assert_eq!(out.to_string(), "a\t1\ttrue\tnil\n");
+
+        let chunk = chunk_of("print 1, 2;\n");
+        assert_eq!(
+            chunk.main.ops(),
+            [Op::Const(0), Op::Const(1), Op::Print(2)],
+            "arguments left to right, then ONE Print"
+        );
+
+        let out = run_src("print \"a\", 1 / 0;\n");
+        assert_eq!(out.lines, Vec::<String>::new(), "no partial line");
+        assert_eq!(out.error, Some(TreadleError::divide_by_zero(1)));
+    }
+
+    /// §6/`.35`: globals are resolved **by name at run time**, so a program that
+    /// mentions an unknown one still produces the output that precedes it. A
+    /// statically resolved slot would have made this empty output plus an error.
+    #[test]
+    fn an_unknown_global_fails_at_run_time_after_the_output_before_it() {
+        let out = run_src("print 1;\nprint nope;\n");
+        assert_eq!(out.lines, ["1"]);
+        assert_eq!(out.error, Some(TreadleError::undefined_name(2, "nope")));
+        assert_eq!(
+            out.to_string(),
+            "1\nerror: Name at line 2: undefined variable 'nope'\n"
+        );
+
+        // A call to an unknown function, likewise — and after prior output.
+        let out = run_src("print 1;\nprint nope();\n");
+        assert_eq!(out.lines, ["1"]);
+        assert_eq!(out.error, Some(TreadleError::undefined_function(2, "nope")));
+
+        // Assignment never creates a binding.
+        let out = run_src("print 1;\nx = 2;\n");
+        assert_eq!(out.lines, ["1"]);
+        assert_eq!(out.error, Some(TreadleError::assign_unbound(2, "x")));
+    }
+
+    /// Parameters are the callee's first locals, the arity is recorded for the
+    /// call site's check, and a body with no `return` returns `Nil` (§2).
+    #[test]
+    fn function_bodies_record_arity_and_return_nil_by_default() {
+        let chunk = chunk_of("fn f(a, b) { return a - b; }\nprint f(7, 2);\n");
+        let f = chunk.function(0).expect("f is compiled");
+        assert_eq!((f.name.as_str(), f.arity), ("f", 2));
+        assert_eq!(
+            f.code.ops(),
+            [
+                Op::GetLocal(0), // a — where Op::Call left the first argument
+                Op::GetLocal(1), // b
+                Op::Sub,
+                Op::Return,
+                // The implicit tail — `return nil` — so a body that falls off
+                // the end returns Nil (§2) and always ends in `Return`.
+                Op::Const(0),
+                Op::Return,
+            ]
+        );
+        assert_eq!(chunk.constant(0), Some(&Value::Nil));
+        assert_eq!(
+            run_src("fn f(a, b) { return a - b; }\nprint f(7, 2);\n").lines,
+            ["5"]
+        );
+
+        // No `return` at all, and a bare `return;`: both Nil.
+        assert_eq!(
+            run_src("fn f() { print 1; }\nprint f();\n").lines,
+            ["1", "nil"]
+        );
+        assert_eq!(run_src("fn f() { return; }\nprint f();\n").lines, ["nil"]);
+
+        // The recorded arity is what the call site checks (§6/.35 step (c)).
+        let out = run_src("fn f(a) { return a; }\nprint f(1, 2);\n");
+        assert_eq!(out.error, Some(TreadleError::wrong_arity(2, "f", 1, 2)));
+
+        // Recursion, and a local declared inside a branch of the body.
+        let out = run_src(
+            "fn fact(n) { if n < 2 { return 1; } return n * fact(n - 1); }\nprint fact(5);\n",
+        );
+        assert_eq!(out.lines, ["120"]);
+        assert_eq!(out.error, None);
+
+        // A function body cannot create a global (§6/.37): its top-level `let`
+        // is a slot, so the name is not visible outside.
+        let out = run_src("fn f() { let inner = 1; return inner; }\nprint f();\nprint inner;\n");
+        assert_eq!(out.lines, ["1"]);
+        assert_eq!(out.error, Some(TreadleError::undefined_name(3, "inner")));
+    }
+
+    /// A nested `fn` is hoisted like any other and compiles to its own
+    /// `Function`, with its own slots starting at 0 — the enclosing body's
+    /// locals are not visible to it (§2: no closures).
+    #[test]
+    fn a_nested_fn_gets_its_own_frame_and_slots_from_zero() {
+        let chunk = chunk_of(
+            "fn outer(a) { fn inner(b) { return b + 1; } return inner(a); }\nprint outer(1);\n",
+        );
+        assert_eq!(chunk.functions().len(), 2);
+        let inner = chunk.function(1).expect("inner is compiled");
+        assert_eq!((inner.name.as_str(), inner.arity), ("inner", 1));
+        assert_eq!(
+            inner.code.op(0),
+            Some(Op::GetLocal(0)),
+            "b is slot 0 in its own frame"
+        );
+        assert_eq!(
+            run_src(
+                "fn outer(a) { fn inner(b) { return b + 1; } return inner(a); }\nprint outer(1);\n"
+            )
+            .lines,
+            ["2"]
+        );
+
+        // The enclosing function's parameter is NOT in scope in `inner`, so it
+        // compiles to a global by name and fails at run time.
+        let out =
+            run_src("fn outer(a) { fn inner() { return a; } return inner(); }\nprint outer(1);\n");
+        assert_eq!(out.error, Some(TreadleError::undefined_name(1, "a")));
+    }
+
+    /// The whole seam, end to end, on the program `ast.rs` uses as its
+    /// representative: `compile` handles every `Stmt` variant in one program and
+    /// the chunk validates.
+    #[test]
+    fn compile_handles_every_statement_variant_in_one_program() {
+        let src = "\
+fn f(a, b) {
+    let t = a + b;
+    while a < b { a = a + 1; }
+    if !(a == b) { return -a; } else { return t; }
+    return;
+}
+let g = 0;
+g = f(1, 2);
+print g, \"done\";
+";
+        let chunk = chunk_of(src);
+        assert_eq!(chunk.functions().len(), 1);
+        let out = machine::run(&chunk);
+        assert_eq!(out.lines, ["3\tdone"]);
+        assert_eq!(out.error, None);
     }
 
     /// Every `BinOp` compiles: eleven to one instruction, `and`/`or` to jumps,

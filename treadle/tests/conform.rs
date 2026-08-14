@@ -49,17 +49,16 @@ use treadle::output::{diff, Output};
 /// [`every_case_against_every_engine`] also asserts the list is non-empty, so an
 /// empty `engines()` can never masquerade as a green run over zero engines.
 ///
-/// The tree engine (bd `.19`/`.20`) is in; the VM's line is still commented
-/// because `Op::Call` was a stub when it landed (bd `.16`/`.17`).
-// `-D warnings` turns `clippy::vec_init_then_push` into an error while the list
-// holds exactly ONE engine. Allowed rather than rewritten to `vec![]`, so that
-// adding the second engine stays the one-line change described above; the lint
-// spans the whole `let` + `push`, so the attribute has to sit on the function.
+/// **Both engines are in**, so the suite now grades them against the corpus and
+/// against **each other**: `tree` (bd `.19`/`.20`) and `vm` (bd `.16`/`.17`).
+// `-D warnings` turns `clippy::vec_init_then_push` into an error. Allowed rather
+// than rewritten to `vec![]`, so that adding an engine stays the one-line change
+// described above; the lint spans the whole `let` + `push`, so the attribute has
+// to sit on the function.
 #[allow(clippy::vec_init_then_push)]
 fn engines() -> Vec<Box<dyn Engine>> {
     let mut engines: Vec<Box<dyn Engine>> = Vec::new();
-    // Uncomment one line per engine as it lands, and drop the `#[ignore]`:
-    // engines.push(Box::new(treadle::vm::machine::Vm::new())); // bd .16 / .17
+    engines.push(Box::new(treadle::vm::Vm::new())); // bd .16 / .17
     engines.push(Box::new(treadle::tree::eval::Eval::new())); // bd .19 / .20
     engines
 }
