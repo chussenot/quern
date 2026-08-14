@@ -276,7 +276,7 @@ cannot.
 whoever leases it next (which is what the prose describes), or say in the prose
 that the path must already have a holder.
 
-### 11. Lease and watch paths resolve relative to cwd, with no warning when the result does not exist — P3
+### 11. Lease and watch paths resolve relative to cwd, with no warning when the result does not exist — P2 (raised: now demonstrated)
 
 Ordinary Unix behaviour, so not a defect — but from inside a crate
 subdirectory, passing a repo-relative path silently registers
@@ -288,6 +288,23 @@ waits in.
 **Fix direction.** Warn when a lease or watch path does not exist in the working
 tree. A watch on a nonexistent path is almost always this mistake; if watching a
 not-yet-created path is legitimate (it is), say so and print the resolved path.
+
+**Raised from P3 after it caught the orchestrator.** I had downgraded this on the
+grounds that cwd-relative resolution is ordinary Unix behaviour and the only
+residual worth fixing was the missing warning. That residual then produced a real
+silent protection failure. Working from the repo root I ran
+`pact lease acquire src/vm/mod.rs` twice; pact answered
+`acquired lease on src/vm/mod.rs` and I believed I held it. The file is at
+`treadle/src/vm/mod.rs` — one project sits at the repo root and the other in a
+subdirectory, so a subdirectory-relative path typed from the root resolves to a
+path that does not exist. **The lease protected nothing, and pact said it did.**
+`--check commit-correlation` correctly flagged both resulting commits
+(`a77ef2eb0927`, `3263945ec97f`).
+
+My other leases in the same session used the full path and were fine, so this is
+not a misunderstanding that education fixes — it is a typo class the tool cannot
+distinguish from a real lease, and the failure mode is silent confidence. That is
+the argument for the warning, now on evidence rather than reasoning.
 
 ---
 
