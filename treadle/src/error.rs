@@ -177,6 +177,37 @@ impl TreadleError {
         }
     }
 
+    /// §6c: an expression nested past [`MAX_NEST`](crate::front::parser::MAX_NEST)
+    /// levels of parentheses or call arguments.
+    ///
+    /// A `Parse` error rather than a runtime one because it is the *parser's*
+    /// own recursion that would overflow — `print ((((…900…))))1;` aborts the
+    /// process on a default stack, and §4 forbids that for any input. Parens
+    /// build no AST node, so this limit is not the same quantity as
+    /// [`expression_too_deep`](Self::expression_too_deep) and neither bounds the
+    /// other.
+    pub fn nesting_too_deep(line: u32, limit: u32) -> TreadleError {
+        TreadleError::Parse {
+            line,
+            msg: format!("expression nested deeper than {limit} levels"),
+        }
+    }
+
+    /// §6c: an expression whose AST is deeper than
+    /// [`MAX_EXPR_DEPTH`](crate::front::parser::MAX_EXPR_DEPTH).
+    ///
+    /// Enforced in the shared front end, so **both** engines inherit it and it
+    /// cannot become a divergence. `1 + 1 + …` is nesting 1 and tree depth N, so
+    /// a nesting limit does not catch it; the engines and `Drop` both recurse
+    /// over tree depth, and the smallest measured ceiling is 20 000 on a default
+    /// stack (bead `.67`).
+    pub fn expression_too_deep(line: u32, limit: u32) -> TreadleError {
+        TreadleError::Parse {
+            line,
+            msg: format!("expression deeper than {limit} nodes"),
+        }
+    }
+
     /// §6 `.42`: functions are one global namespace and a duplicate `fn` name is
     /// a `Parse` error, reported at the second declaration. Both engines define
     /// from `Program::fns` and neither may decide which of two same-named

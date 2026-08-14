@@ -40,6 +40,19 @@ pub(crate) fn describe(kind: &TokenKind) -> String {
     }
 }
 
+/// §6c: how deep parentheses and call arguments may nest. Bounds the *parser's*
+/// own recursion, which nothing else does — parens create no AST node. Parse of
+/// nested parens survives 700 and aborts by 850 on a default 8 MiB stack, so
+/// 100 leaves a 7x margin and is far past anything a human writes.
+pub const MAX_NEST: u32 = 100;
+
+/// §6c: how deep an expression's AST may be. Bounds what the engines and `Drop`
+/// recurse over. Measured ceilings: engines survive 15 000 and abort at 20 000
+/// on 8 MiB, survive 40 000 and abort at 50 000 on the 64 MiB thread
+/// `Engine::run` uses, and `Drop` alone survives 50 000. 10 000 is below the
+/// smallest of those, so the limit holds whatever stack the caller provides.
+pub const MAX_EXPR_DEPTH: u32 = 10_000;
+
 /// A position in the token vector.
 ///
 /// `tokenize` guarantees a trailing [`TokenKind::Eof`], and [`Cursor::advance`]
@@ -48,6 +61,12 @@ pub(crate) fn describe(kind: &TokenKind) -> String {
 pub(crate) struct Cursor {
     toks: Vec<Token>,
     pos: usize,
+    /// Current parenthesis / call-argument nesting, against [`MAX_NEST`].
+    nest: u32,
+    /// Depth of the AST the most recent expression producer returned. Carried on
+    /// the cursor rather than in every signature so `parse_expr` keeps the shape
+    /// `parser-stmt` imports; each producer writes it before returning.
+    last_depth: u32,
 }
 
 impl Cursor {
@@ -57,7 +76,38 @@ impl Cursor {
             matches!(toks.last().map(|t| &t.kind), Some(TokenKind::Eof)),
             "tokenize always ends the stream with Eof"
         );
-        Cursor { toks, pos: 0 }
+        Cursor {
+            toks,
+            pos: 0,
+            nest: 0,
+            last_depth: 0,
+        }
+    }
+
+    /// §6c. Enter a nesting level, refusing past [`MAX_NEST`]. Paired with
+    /// [`Cursor::leave`] — the guard is on the way *in*, so the parser never
+    /// makes the recursive call that would overflow.
+    fn enter(&mut self, line: u32) -> Result<()> {
+        self.nest += 1;
+        if self.nest > MAX_NEST {
+            return Err(TreadleError::nesting_too_deep(line, MAX_NEST));
+        }
+        Ok(())
+    }
+
+    fn leave(&mut self) {
+        self.nest -= 1;
+    }
+
+    /// §6c. Record the depth of the expression just built, refusing past
+    /// [`MAX_EXPR_DEPTH`]. Called at every node construction, so a chain is
+    /// caught as it grows rather than after a 100 000-node tree exists.
+    fn depth(&mut self, d: u32, line: u32) -> Result<u32> {
+        if d > MAX_EXPR_DEPTH {
+            return Err(TreadleError::expression_too_deep(line, MAX_EXPR_DEPTH));
+        }
+        self.last_depth = d;
+        Ok(d)
     }
 
     /// The token about to be consumed. At the end of input this is the `Eof`
@@ -183,11 +233,16 @@ fn binary(c: &mut Cursor, level: u32) -> Result<Expr> {
         return unary(c);
     }
     let mut lhs = binary(c, level + 1)?;
+    let mut depth = c.last_depth;
     while let Some(op) = binop_at(level, &c.peek().kind) {
         // The node's line is the operator's, per §6 `.46`: an error is reported
         // at the innermost node that failed, and for `a\n+ b` that is the `+`.
         let line = c.advance().line;
         let rhs = binary(c, level + 1)?;
+        // §6c: each fold deepens the tree by one on the left. Checked here, as
+        // the chain grows, so `1 + 1 + …` is refused at 10 000 instead of
+        // building a 100 000-node tree that aborts the process when dropped.
+        depth = c.depth(depth.max(c.last_depth) + 1, line)?;
         lhs = Expr::Binary {
             op,
             lhs: Box::new(lhs),
@@ -195,6 +250,7 @@ fn binary(c: &mut Cursor, level: u32) -> Result<Expr> {
             line,
         };
     }
+    c.last_depth = depth;
     Ok(lhs)
 }
 
@@ -215,7 +271,14 @@ fn unary(c: &mut Cursor) -> Result<Expr> {
         _ => return primary(c),
     };
     let line = c.advance().line;
+    // §6c: `-` and `!` are right-associative, so a prefix run recurses here as
+    // well as deepening the tree. Guarding nesting bounds the recursion; the
+    // depth check below bounds what the engines then walk.
+    c.enter(line)?;
     let rhs = unary(c)?;
+    c.leave();
+    let d = c.last_depth + 1;
+    c.depth(d, line)?;
     Ok(Expr::Unary {
         op,
         rhs: Box::new(rhs),
@@ -232,6 +295,8 @@ fn primary(c: &mut Cursor) -> Result<Expr> {
     let line = c.peek().line;
     match c.peek().kind {
         TokenKind::Int(_) | TokenKind::Str(_) | TokenKind::Bool(_) | TokenKind::Nil => {
+            // §6c: a leaf is depth 1. Every other producer builds on this.
+            c.depth(1, line)?;
             Ok(Expr::Lit(match c.advance().kind {
                 TokenKind::Int(n) => Value::Int(n),
                 TokenKind::Str(s) => Value::str(s),
@@ -244,18 +309,27 @@ fn primary(c: &mut Cursor) -> Result<Expr> {
             // A call target is always a bare identifier: §2 has no first-class
             // functions, so there is no callee expression to parse.
             if c.eat(&TokenKind::LParen) {
-                Ok(Expr::Call {
-                    name,
-                    args: call_args(c)?,
-                    line,
-                })
+                // §6c: an argument list re-enters `parse_expr`, so it nests.
+                c.enter(line)?;
+                let args = call_args(c)?;
+                c.leave();
+                // Depth of a call is one past its deepest argument, which
+                // `call_args` left in `last_depth`; a call with none is a leaf.
+                c.depth(c.last_depth + 1, line)?;
+                Ok(Expr::Call { name, args, line })
             } else {
+                c.depth(1, line)?;
                 Ok(Expr::Var { name, line })
             }
         }
         TokenKind::LParen => {
             c.advance();
+            // §6c: parens build **no node**, so they do not deepen the tree —
+            // but they do deepen the parser's own recursion, and nothing else
+            // bounds that. This is the guard that stops `((((…900…))))1`.
+            c.enter(line)?;
             let inner = parse_expr(c)?;
+            c.leave();
             c.expect(&TokenKind::RParen)?;
             Ok(inner)
         }
@@ -276,18 +350,24 @@ fn primary(c: &mut Cursor) -> Result<Expr> {
 ///
 /// A trailing comma is not accepted (§6 `.46`): after a `,` an expression is
 /// required, so `f(1,)` fails on the `)` with "unexpected ')'".
+/// Leaves `c.last_depth` holding the **deepest** argument's depth, not the last
+/// one's, so the caller can size the `Call` node correctly (§6c).
 fn call_args(c: &mut Cursor) -> Result<Vec<Expr>> {
     let mut args = Vec::new();
     if c.eat(&TokenKind::RParen) {
+        c.last_depth = 0;
         return Ok(args);
     }
+    let mut deepest = 0;
     loop {
         args.push(parse_expr(c)?);
+        deepest = deepest.max(c.last_depth);
         if !c.eat(&TokenKind::Comma) {
             break;
         }
     }
     c.expect(&TokenKind::RParen)?;
+    c.last_depth = deepest;
     Ok(args)
 }
 
@@ -1259,5 +1339,72 @@ mod tests {
             sshape(&p.stmts[8]),
             "(fn fact (n) [(if (Lt n 2) [(return 1)] []) (return (Mul n (call fact [(Sub n 1)])))])"
         );
+    }
+
+    // ---- §6c: nothing may abort the process (bead `.67`) ----
+    //
+    // Each of these used to be `fatal runtime error: stack overflow, aborting`,
+    // which §4 forbids for any input. They are three DIFFERENT recursions and
+    // two different limits: parens deepen the parser without deepening the tree,
+    // a chain deepens the tree without deepening the parser.
+
+    /// Parens build no AST node, so only the nesting limit catches this. Used to
+    /// abort by 850 on a default stack.
+    #[test]
+    fn deeply_nested_parens_are_a_parse_error_not_an_abort() {
+        for n in [MAX_NEST + 1, 900, 5_000] {
+            let src = format!(
+                "print {}1{};",
+                "(".repeat(n as usize),
+                ")".repeat(n as usize)
+            );
+            let e = parse(&src).expect_err("must be refused, not abort");
+            assert!(
+                matches!(&e, TreadleError::Parse { line: 1, msg } if msg.contains("nested deeper")),
+                "n={n} gave {e:?}"
+            );
+        }
+    }
+
+    /// A chain is nesting 1 and tree depth N, so only the depth limit catches it.
+    /// `parse` used to SUCCEED here and abort while dropping the tree.
+    #[test]
+    fn a_long_chain_is_a_parse_error_not_an_abort_in_drop() {
+        let src = format!("print 1{};", " + 1".repeat(100_000));
+        let e = parse(&src).expect_err("must be refused, not abort");
+        assert!(
+            matches!(&e, TreadleError::Parse { line: 1, msg } if msg.contains("deeper than")),
+            "got {e:?}"
+        );
+    }
+
+    /// A prefix run is right-associative, so it recurses AND deepens.
+    #[test]
+    fn a_long_prefix_run_is_refused() {
+        let src = format!("print {}1;", "-".repeat(5_000));
+        assert!(parse(&src).is_err(), "must be refused, not abort");
+    }
+
+    /// The limits must not touch anything a person would write. Both are orders
+    /// of magnitude above real code, which is the point of choosing them from
+    /// measured ceilings rather than taste.
+    #[test]
+    fn the_limits_do_not_reject_ordinary_programs() {
+        assert!(parse("print ((((1 + 2)) * 3));").is_ok());
+        assert!(parse("print -(-(-(1)));").is_ok());
+        assert!(parse("fn f(a, b) { return a + b; }\nprint f(f(1, 2), f(3, 4));").is_ok());
+        // Nesting 20 and a 500-term chain both pass comfortably.
+        let deep = format!("print {}1{};", "(".repeat(20), ")".repeat(20));
+        assert!(parse(&deep).is_ok());
+        let chain = format!("print 1{};", " + 1".repeat(500));
+        assert!(parse(&chain).is_ok());
+    }
+
+    /// Depth is per-expression, not cumulative across a program: a thousand
+    /// separate statements must not add up to the cap.
+    #[test]
+    fn depth_does_not_accumulate_across_statements() {
+        let src = "print 1 + 1 + 1 + 1;\n".repeat(1_000);
+        assert!(parse(&src).is_ok(), "1000 shallow statements must parse");
     }
 }

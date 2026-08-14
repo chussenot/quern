@@ -325,6 +325,30 @@ a second convention to keep in step for no gain.
 why `eval-expr` filed this rather than reading `src/vm/` to see what group A did,
 which is exactly the behaviour the isolation rule is for.
 
+## 6c. Program limits: nothing may abort the process (bead `.67`)
+
+§4 says a panic on any input is a bug. A stack overflow is worse than a panic —
+it is a `SIGABRT` that takes the process down — and `print ((((…900…))))1;` is a
+typo, not pathological input. Two limits, both **Parse** errors, both measured
+rather than guessed:
+
+| limit | value | why that number |
+|---|---|---|
+| expression nesting depth | **100** | parse of nested parens survives 700 and aborts by 850 on a default 8 MiB stack. Parens create no AST node, so this bounds *parser recursion*, which nothing else does. |
+| expression tree depth | **10 000** | the engines walk the tree: they survive 15 000 and abort at 20 000 on 8 MiB, and survive 40 000 and abort at 50 000 on the 64 MiB thread `Engine::run` uses. 10 000 is below the *smallest* of those, so the limit holds whatever stack the caller gives us. |
+
+The tree-depth limit is the load-bearing one and it is not the same quantity as
+nesting: `((((1))))` is nesting 4 and tree depth 1, while `1 + 1 + …` is nesting
+1 and tree depth N. One does not bound the other, which is why there are two
+numbers.
+
+Both engines inherit the limits for free, because both go through the shared
+front end — so the limits are enforced in exactly one place and cannot become a
+divergence. That matters: capping in each engine separately would reintroduce
+precisely the asymmetry bead `.74` was about, where the two engines survived
+different depths and the differential fuzzer could not see it because an abort
+yields no `Output` to compare.
+
 ## 6a. Error wording: the landed `value.rs` is the spec (bead `.55`)
 
 Bead `.39` proposed a table of operator and builtin error messages. It never

@@ -118,16 +118,32 @@ mod tests {
 
     /// The engines must survive the same depths. Before the big-stack thread was
     /// added here, `print 1 + 1 + …` with 20000 terms returned `20001` on group B
-    /// and aborted the process on group A — a behaviour difference the
+    /// and **aborted the process** on group A — a behaviour difference the
     /// differential fuzzer cannot see, because an abort yields no `Output` to
-    /// compare. 20000 is well past the ~2000 that overflowed the default stack
-    /// and well inside what group B already handled.
+    /// compare (bead `.74`).
+    ///
+    /// Since bead `.67` the front end caps AST depth at `MAX_EXPR_DEPTH`, so the
+    /// asymmetry is now *unreachable* rather than merely equalised: a 20000-term
+    /// chain never reaches either engine. This test pins both halves — the depth
+    /// that still runs, and the depth that is refused identically.
     #[test]
     fn a_deeply_nested_expression_does_not_abort_the_process() {
+        // Comfortably inside the cap: the VM evaluates it, no abort.
+        let src = format!("print 1{};\n", " + 1".repeat(8_000));
+        let out = Vm::new().run(&src);
+        assert_eq!(out.to_string(), "8001\n");
+        assert!(out.error.is_none());
+
+        // Past the cap: a Parse error, not a SIGABRT. This is the depth that
+        // used to abort here while group B returned a number.
         let src = format!("print 1{};\n", " + 1".repeat(20_000));
         let out = Vm::new().run(&src);
-        assert_eq!(out.to_string(), "20001\n");
-        assert!(out.error.is_none());
+        assert!(
+            matches!(out.error, Some(TreadleError::Parse { line: 1, .. })),
+            "past MAX_EXPR_DEPTH must be a Parse error, got {:?}",
+            out.error
+        );
+        assert!(out.lines.is_empty(), "nothing ran, so nothing printed");
     }
 
     /// §3: the same source gives the same `Output` on a reused engine.
