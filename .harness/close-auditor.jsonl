@@ -87,3 +87,8 @@
 {"at":"2026-08-14T12:41:46Z","agent":"close-auditor","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.234,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:41:58Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.391,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:44:05Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.418,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:03Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.430,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:04Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.421,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:04Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.412,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:05Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.384,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:28Z","agent":"close-auditor","tool":"bd","argv":"bd show bd_30-agents-2jk.67","secs":0.381,"exit":0,"sigpipe":false,"stderr":""}
