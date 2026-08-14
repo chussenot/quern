@@ -1,0 +1,30 @@
+{"at":"2026-08-14T08:08:38Z","agent":"spec-adversary","tool":"pact","argv":"pact msg inbox","secs":0.034,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:08:47Z","agent":"spec-adversary","tool":"pact","argv":"pact lease ls","secs":0.019,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:08:48Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.4","secs":0.354,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:08:55Z","agent":"spec-adversary","tool":"bd","argv":"bd update bd_30-agents-2jk.4 --claim","secs":0.365,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:08:55Z","agent":"spec-adversary","tool":"bd","argv":"bd list","secs":0.360,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:14Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.1","secs":0.356,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:14Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.2","secs":0.356,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:14Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.3","secs":0.356,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:15Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.5","secs":0.338,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:15Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.6","secs":0.359,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:16Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.7","secs":0.340,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:16Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.8","secs":0.355,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:16Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.9","secs":0.372,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:19Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.10","secs":2.916,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:29Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.11","secs":0.366,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:29Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.12","secs":0.364,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:30Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.13","secs":0.359,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:30Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.14","secs":0.365,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:30Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.15","secs":0.344,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:31Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.16","secs":0.336,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:31Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.17","secs":0.356,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:40Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.18","secs":0.363,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:40Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.19","secs":0.348,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:40Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.20","secs":0.372,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:41Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.21","secs":0.364,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:41Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.22","secs":0.348,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:42Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.23","secs":0.351,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:42Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.24","secs":0.361,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:42Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.25","secs":0.362,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:09:43Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.26","secs":0.365,"exit":0,"stderr":""}

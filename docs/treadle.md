@@ -74,6 +74,13 @@ conversion anywhere.
 | 6 | `*` `/` `%` | Int | Int |
 | 7 (tightest) | `-` `!` prefix | Int / Bool | Int / Bool |
 
+`=` is **not** in that table, and deliberately so: it is a statement token, not
+an expression operator. It appears only in `let x = e;` and `x = e;`. There is
+no assignment-as-expression, so `x = (y = 1)` and `if (x = 1) { }` are **parse**
+errors. Pinned here because an engine that accepted assignment as an expression
+would diverge from one that did not, and the fuzzer would report it as a bug in
+whichever engine you happened to blame.
+
 `and` and `or` **short-circuit**: the right operand is not evaluated when the
 left decides the answer. This is observable through `print` inside a call, so
 both engines must do it, and the fuzzer will find it if one does not.
