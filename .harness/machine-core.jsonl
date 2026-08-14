@@ -1,0 +1,16 @@
+{"at":"2026-08-14T08:56:06Z","agent":"machine-core","tool":"pact","argv":"pact msg inbox","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:13Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-d0bc0b27a71bdcbc","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:22Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.043,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:22Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-f928f353760aeef3","secs":0.050,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:31Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-fe57c1bb128913d7","secs":0.063,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:31Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-c5112b2d1ff3ffdf","secs":0.049,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:40Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-c5112b2d1ff3ffdf","secs":0.043,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:40Z","agent":"machine-core","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:50Z","agent":"machine-core","tool":"bd","argv":"bd update bd_30-agents-2jk.16 --claim","secs":0.339,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:50Z","agent":"machine-core","tool":"bd","argv":"bd show bd_30-agents-2jk.16","secs":0.334,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact watch add src/value.rs","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact watch add src/error.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact watch add src/output.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact watch add src/vm/opcode.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact lease acquire src/vm/machine.rs --note vm-A dispatch loop core: stack, locals frame, globals map, arith/cmp via value.rs, Print via Output; leaving Call/Return to machine-calls","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:56:59Z","agent":"machine-core","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
