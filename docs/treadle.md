@@ -160,7 +160,18 @@ pub enum Stmt {
 }
 pub struct FnDecl { pub name: String, pub params: Vec<String>, pub body: Vec<Stmt>, pub line: u32 }
 pub struct Program { pub stmts: Vec<Stmt>, pub fns: Vec<Rc<FnDecl>> }
+
+// The two operator enums, listed in §2 precedence order, loosest first, so the
+// parser's ladder reads top-to-bottom against `BinOp`. Rust's own spelling
+// throughout: `Rem` not `Mod`, `Ne` not `Neq`, `Le`/`Ge` not `Lte`/`Gte`.
+pub enum UnOp { Neg, Not }
+pub enum BinOp { Or, And, Eq, Ne, Lt, Gt, Le, Ge, Add, Sub, Mul, Div, Rem }
 ```
+
+`Or` and `And` are `BinOp` variants even though both engines must special-case
+them **before** evaluating `rhs` (§2 short-circuit): keeping them here means the
+parser needs no separate node and the frozen `Expr` needs no sixth variant.
+There is no `UnOp::Pos` — `+x` is not in the grammar.
 
 Every node carries a `line`, because an error's line number is part of the
 observable output and the two engines must agree on it.
@@ -229,6 +240,24 @@ output lines:
 error: Value at line 3: divide by zero
 ```
 
+**How an `Output` is compared to an `--- expect` section.** By a byte comparison
+of a canonical rendering — never by splitting either side into lines. The
+rendering is `Display for Output`: every print line newline-**terminated** (not
+separated), then the error's display form, also newline-terminated. `terminated,
+not separated` is load-bearing: it is what makes `lines == []` render as `""` and
+`lines == [""]` render as `"\n"`.
+
+The source section is every byte after the line exactly `--- source` up to the
+**first** line exactly `--- expect` (byte-exact line equality, no trimming); the
+expect section is every remaining byte of the file, verbatim; the assertion is
+`expect_bytes == output.to_string()`. That settles trailing newlines, an
+expected-empty output, a printed empty line, a printed string containing `\n`,
+and a printed line that begins with `error: ` — no line is ever *classified*, so
+none of them needs a rule. A program whose source contains a line that is exactly
+`--- expect` is not expressible; `print "--- expect";` is, because that line is
+not byte-equal to the delimiter. See bead `.34`, which also excludes `*.tr` from
+the whitespace-fixing pre-commit hooks that would otherwise rewrite an assertion.
+
 `tests/conform.rs` runs **every case against both engines** and fails naming
 the engine, the file, the expected and the actual. A case that passes on one
 engine and fails on the other is the most valuable failure the suite can
@@ -245,3 +274,91 @@ to a minimal reproduction is worth building if time allows; say so either way.
 `cargo fmt --check` clean, `#![forbid(unsafe_code)]`, zero dependencies beyond
 `rand` (dev-only, for the fuzzer's seeded generator). Anything else needs a
 comment arguing for it.
+
+## 6. Pinned edges
+
+Every line below is a case §2–§5 left open where the two engines would each have
+followed their own most natural implementation to a **different** answer. They
+are normative. Each cites the bead carrying the full argument and the exact fix;
+read that bead before disagreeing, and file a new one rather than editing here.
+
+**Order and observability** (`.33`). Argument evaluation is **left to right**
+everywhere: `print` arguments, call arguments, and the two operands of a binary
+operator (`lhs` completely, side effects included, before `rhs` is touched).
+`and`/`or` may skip `rhs` entirely; that is short-circuiting, not reordering. A
+`print` appends **exactly one** element to `Output.lines`, and only once every
+argument evaluated successfully — so `print "a", 1/0;` is
+`{lines: [], error: …divide by zero}` and there is **no partial line**. The CLI
+renders a finished `Output`; it must not stream.
+
+**Truthiness, and there is none** (`.40`). The condition of `if`/`while` must be
+`Bool`; any other type is a `Type` error at the condition's line. Both engines
+route it through one `Value::as_bool(line)`.
+
+**Short-circuit typing** (`.40`). The left operand of `and`/`or` must be `Bool`.
+The right is type-checked **only if it is evaluated**: `false and 1` is `false`,
+`true or nil` is `true`, `true and 1` is a `Type` error.
+
+**Equality and ordering** (`.40`). `==`/`!=` across two different types is a
+`Type` error, not `false`. `nil == nil` is `true`. `Str` orders
+byte-lexicographically (Rust's `Ord for str`); every pairing under `< > <= >=`
+other than Int/Int and Str/Str is a `Type` error.
+
+**Integers** (`.41`). An integer literal is ASCII digits converted with
+`i64::from_str`; out of range is a `Lex` error, so `i64::MIN` is reachable only
+through arithmetic. `-i64::MIN`, `i64::MIN / -1` and `i64::MIN % -1` are `Value`
+overflow errors — use `checked_*`, never bare `/` or `%`. `int(s)` is exactly
+`s.parse::<i64>()`; `int` of a non-`Str` is a `Type` error.
+
+**Operator messages** (`.39`). `value.rs` owns the semantics **and** the message
+of every operator, builtin and Bool gate, taking the line in and returning a
+built `TreadleError` out. Neither engine may construct an error from a literal
+string; a message not on that list is a spec gap, not a `format!`.
+
+**`let`** (`.37`). The initialiser is evaluated in the scope **as it exists
+before** the new binding is created, so with an outer `x` at 1, `let x = x + 1;`
+binds a new `x` at 2 — a compiler must emit the initialiser before declaring the
+slot. Re-declaring in the same scope is legal and the later `let` wins.
+Top-level scope **is** global scope; a function body cannot create a global.
+
+**Statements** (`.44`, `.46`). There are no expression statements: `f();` is a
+`Parse` error — call for effect with `print f();` or `let _ = f();`. `print`
+takes one or more arguments. Bodies of `if`/`else`/`while` are always braced, so
+there is no dangling else; `else if` chains as `els: vec![Stmt::If{..}]`. `let`
+always has an initialiser.
+
+**Calls** (`.35`). The compiler raises **no** errors: `compile` is infallible for
+any `Program` the front end produced, and every `Type`/`Name`/`Value` error is
+raised when execution reaches it, so `if false { nope(); }` runs clean. A `Call`
+proceeds in exactly this order — (a) evaluate arguments left to right, (b)
+resolve the name, (c) check arity, (d) check depth, (e) enter. `(a)` precedes
+`(b)` because bytecode forces it, so `nope(1/0)` is `divide by zero`.
+
+**Functions** (`.42`). Functions and variables are **separate namespaces**. A
+duplicate `fn` name is a `Parse` error; `len`, `str` and `int` are reserved as
+function names (a `Parse` error to declare) but not as variable names. A function
+name used as a value is `undefined variable`.
+
+**Recursion depth** (`.36`). The counted quantity is **active invocations**, not
+frames: the top-level program is depth 0. The check is `depth == 1000` at the
+call site, as step (d) above — after arguments, name and arity, before the callee
+exists. So 1000 nested invocations succeed and the 1001st fails, with a `Value`
+error at the **call's** line, from one constructor, against one
+`error::MAX_DEPTH`. Builtins do not consume depth. The tree-walker counts
+deliberately and, if 1000 overflows the test stack, runs on a bigger thread — the
+limit is observable and cannot be tuned by one engine.
+
+**Error lines** (`.46`). An error's line is the line of the innermost AST node
+that failed, never the enclosing statement's, so the VM's line table needs an
+entry per **fallible instruction**.
+
+**Engine-only errors** (`.45`). `error::internal(line, what)` exists for a broken
+engine invariant and is documented as unreachable: no treadle program can cause
+one. The VM has no program-size limit observable in `Output` — operands are
+`u32`/`usize`, never `u8`.
+
+**Termination** (`.43`). treadle has no step, time or instruction limit, and
+neither engine may invent one: "one step" is not the same quantity in a VM and a
+tree-walker, so a step budget would *be* the divergence. The fuzzer's generator
+emits only counter-bounded `while` loops, and guards wall clock in the harness,
+outside `Output`.
