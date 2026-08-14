@@ -423,6 +423,26 @@ mod tests {
             Value::Int(i64::MIN).neg(L).unwrap_err(),
             TreadleError::overflow(L)
         );
+        // §6 (`.41`): the three i64::MIN edges are Value *overflow*, not panics
+        // — a bare `/` or `%` would abort the process here, which §4 forbids.
+        assert_eq!(
+            Value::Int(i64::MIN).div(&Value::Int(-1), L).unwrap_err(),
+            TreadleError::overflow(L)
+        );
+        assert_eq!(
+            Value::Int(i64::MIN).rem(&Value::Int(-1), L).unwrap_err(),
+            TreadleError::overflow(L)
+        );
+        // And a zero divisor outranks overflow, so i64::MIN / 0 is not "integer
+        // overflow" — the two engines must agree on which check comes first.
+        assert_eq!(
+            Value::Int(i64::MIN).div(&Value::Int(0), L).unwrap_err(),
+            TreadleError::divide_by_zero(L)
+        );
+        assert_eq!(
+            Value::Int(i64::MIN).rem(&Value::Int(0), L).unwrap_err(),
+            TreadleError::modulo_by_zero(L)
+        );
         assert_eq!(
             Value::Int(1).add(&Value::Bool(true), L).unwrap_err(),
             TreadleError::type_mismatch(L, "+", "Int or Str", "Int", "Bool")
