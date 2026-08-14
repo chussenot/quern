@@ -1,0 +1,12 @@
+# 221: calling a name that is neither one of the three builtins nor a declared
+# function. Functions are hoisted (§2), so "declared further down" is not an
+# excuse and the name really is unknown — `error.rs::undefined_function`, a
+# `Name` error per §3. The line printed before it survives and the line after it
+# never runs (§3: the output of lines 1..n, then the error).
+--- source
+print "before";
+print nope(1);
+print "after";
+--- expect
+before
+error: Name at line 2: undefined function 'nope'

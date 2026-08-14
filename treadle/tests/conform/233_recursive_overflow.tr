@@ -1,0 +1,18 @@
+# 233: overflow inside a recursive function is a `Value` error on the `*` — "not
+# a wrap and not a panic" (§4), and §6 `.41` requires `checked_*`. fact(21) is
+# 21 * 20!, and 20! is already 2432902008176640000 against an i64 max of
+# 9223372036854775807, so the OUTERMOST multiply is the one that overflows,
+# after 20 invocations have already returned successfully.
+# Every invocation's `*` is the same AST node on line 3, so the reported line is
+# 3 whichever multiply an engine blames. The first print shows the recursion
+# itself is sound right up to the edge.
+--- source
+fn fact(n) {
+  if n < 2 { return 1; }
+  return n * fact(n - 1);
+}
+print fact(20);
+print fact(21);
+--- expect
+2432902008176640000
+error: Value at line 3: integer overflow

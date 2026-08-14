@@ -1,0 +1,18 @@
+# 227: overshooting the limit by fifty times over lands the SAME error at the
+# same line — a limit, not a function of how far past it you asked to go. Only
+# 1000 invocations ever happen, so this case is no slower than 226.
+# It also asserts §3's "a program that fails at line 9 has the output of lines
+# 1..8 and then the error": both printed lines survive ahead of the failure, so
+# an engine that buffered output and dropped it on error diverges here.
+--- source
+print "start";
+print 1 + 1;
+fn deep(n) {
+  if n == 0 { return 0; }
+  return deep(n - 1);
+}
+print deep(50000);
+--- expect
+start
+2
+error: Value at line 5: recursion limit of 1000 frames exceeded

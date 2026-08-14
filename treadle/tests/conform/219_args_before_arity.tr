@@ -1,0 +1,9 @@
+# 219: §6 `.35` pins the `Call` order as (a) evaluate arguments left to right,
+# (b) resolve the name, (c) check arity, (d) check depth, (e) enter. The arity
+# here is also wrong — one parameter, two arguments — but step (a) fails first,
+# so this is `divide by zero` and NOT the arity error of case 217.
+--- source
+fn one(a) { return a; }
+print one(1 / 0, 2);
+--- expect
+error: Value at line 2: divide by zero

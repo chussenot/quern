@@ -1,0 +1,14 @@
+# 209: `return;` with no value yields Nil — `Stmt::Return { value: None, .. }`
+# in the frozen §3 AST — and it stops the body, so the statement after it never
+# runs. An engine that treated a valueless return as a no-op would print
+# `after` here.
+--- source
+fn early() {
+  print "before";
+  return;
+  print "after";
+}
+print early();
+--- expect
+before
+nil

@@ -1,0 +1,17 @@
+# 212: factorial by recursion, the §2 example, including both base cases.
+# fact(20) is the largest that fits in an i64 — 2432902008176640000 against a
+# max of 9223372036854775807 — and fact(21) overflows, which is case 233.
+--- source
+fn fact(n) {
+  if n < 2 { return 1; }
+  return n * fact(n - 1);
+}
+print fact(0);
+print fact(1);
+print fact(5);
+print fact(20);
+--- expect
+1
+1
+120
+2432902008176640000

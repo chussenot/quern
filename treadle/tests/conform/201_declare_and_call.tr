@@ -1,0 +1,9 @@
+# 201: a function declaration and a call — the §2 example. Also a call whose
+# arguments are themselves calls, so the result of one feeds the next.
+--- source
+fn add(a, b) { return a + b; }
+print add(1, 2);
+print add(add(1, 2), add(3, 4));
+--- expect
+3
+10

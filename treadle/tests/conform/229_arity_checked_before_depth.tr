@@ -1,0 +1,18 @@
+# 229: §6 `.35` orders the `Call` steps (c) check arity BEFORE (d) check depth,
+# and this case is the only way to tell. At depth 1000 — where a well-formed
+# call to a user function is refused, per 226 — a call with the WRONG arity
+# reports the arity error, because step (c) runs first and step (d) is never
+# reached. An engine that checked depth first would report the recursion limit,
+# and both answers look defensible until the order is pinned.
+#
+# `down(0)` is invocation #1000 at depth 1000; `two(1)` at line 3 has its one
+# argument evaluated (a) and `two` resolved (b) successfully, then fails (c).
+--- source
+fn two(a, b) { return a + b; }
+fn down(n) {
+  if n == 0 { return two(1); }
+  return down(n - 1);
+}
+print down(999);
+--- expect
+error: Type at line 3: two expects 2 arguments, got 1

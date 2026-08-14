@@ -1,0 +1,19 @@
+# 232: one more step of 231's cycle crosses the limit. `a(500)` produces
+# 1 + 2*500 = 1001 invocations; invocation #1000 is `b(0)` running at depth
+# 1000, and the call site refused is the one INSIDE `b` — line 6 — not the one
+# inside `a` at line 3. So this case pins the reported line to whichever call
+# site actually happened to be the 1001st, which in a mutual cycle is not the
+# function the program called.
+# The message is `error::recursion_limit`, identical to 226's: one constructor,
+# one `MAX_DEPTH`, so no engine and no call site can respell it.
+--- source
+fn a(n) {
+  if n == 0 { return 0; }
+  return b(n - 1);
+}
+fn b(n) {
+  return a(n);
+}
+print a(500);
+--- expect
+error: Value at line 6: recursion limit of 1000 frames exceeded

@@ -1,0 +1,9 @@
+# 216: wrong arity, too FEW arguments. §2 makes it a runtime error and §3 files
+# arity under `Type` ("wrong operand type, wrong arity"). The message names both
+# the expected and the actual count and comes from `error.rs::wrong_arity`,
+# which pluralises on the EXPECTED count — 2 takes "arguments".
+--- source
+fn add(a, b) { return a + b; }
+print add(1);
+--- expect
+error: Type at line 2: add expects 2 arguments, got 1

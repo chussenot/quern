@@ -1,0 +1,14 @@
+# 207: a function body cannot create a global (§6 `.37`). The `let` inside `f`
+# binds in f's own scope and is gone when f returns, so the read at line 6
+# fails even though f ran successfully first — and the output of the successful
+# lines survives ahead of the error (§3).
+--- source
+fn f() {
+  let made_global = 1;
+  return made_global;
+}
+print f();
+print made_global;
+--- expect
+1
+error: Name at line 6: undefined variable 'made_global'

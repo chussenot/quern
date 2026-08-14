@@ -1,0 +1,10 @@
+# 220: step (a) precedes step (b) (§6 `.35`), because bytecode forces it — the
+# VM has pushed the arguments before it can look at the callee. So a failing
+# argument to a function that does not even exist reports `divide by zero`, not
+# `undefined function 'nope'`. A tree-walker that resolved the name first would
+# diverge here, and this case is the reason the order is pinned rather than left
+# to each engine's most natural shape.
+--- source
+print nope(1 / 0);
+--- expect
+error: Value at line 1: divide by zero

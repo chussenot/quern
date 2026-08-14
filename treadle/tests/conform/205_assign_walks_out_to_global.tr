@@ -1,0 +1,13 @@
+# 205: assignment without `let` walks outward to the nearest existing binding
+# (§2), and for a function body the next scope out is the global one. So a
+# function CAN mutate a global — it just cannot create one (case 207).
+--- source
+let total = 0;
+fn add(n) { total = total + n; return total; }
+print add(1);
+print add(2);
+print total;
+--- expect
+1
+3
+3

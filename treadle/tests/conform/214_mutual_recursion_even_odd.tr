@@ -1,0 +1,22 @@
+# 214: mutual recursion, the classic pair. `is_even` calls `is_odd` before
+# `is_odd` is declared, so hoisting (§2) and the cycle are both load-bearing.
+# Note there is no truthiness anywhere (§6 `.40`) — these return real Bools and
+# `print` renders them `true` / `false` via `Display for Value` (§3).
+--- source
+fn is_even(n) {
+  if n == 0 { return true; }
+  return is_odd(n - 1);
+}
+fn is_odd(n) {
+  if n == 0 { return false; }
+  return is_even(n - 1);
+}
+print is_even(10);
+print is_odd(10);
+print is_even(7);
+print is_odd(7);
+--- expect
+true
+false
+false
+true

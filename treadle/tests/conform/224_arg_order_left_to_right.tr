@@ -1,0 +1,17 @@
+# 224: argument evaluation order is observable through a `print` inside a call,
+# and §6 `.33` pins it LEFT TO RIGHT everywhere. Also asserts that the outer
+# `print` appends exactly ONE line and only after every argument succeeded, so
+# all three tag lines land ahead of the sum and none of them is interleaved
+# with a partial line.
+--- source
+fn note(tag, v) {
+  print tag;
+  return v;
+}
+fn add3(a, b, c) { return a + b + c; }
+print add3(note("first", 1), note("second", 2), note("third", 3));
+--- expect
+first
+second
+third
+6

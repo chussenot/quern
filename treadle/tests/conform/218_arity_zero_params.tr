@@ -1,0 +1,8 @@
+# 218: a zero-parameter function called with an argument. The expected count is
+# 0, and `error.rs` pluralises everything that is not 1, so this is
+# "0 arguments" — the other edge of case 217's singular.
+--- source
+fn none() { return 0; }
+print none(1);
+--- expect
+error: Type at line 2: none expects 0 arguments, got 1

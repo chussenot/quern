@@ -1,0 +1,15 @@
+# 204: a parameter shadows a global of the same name for the whole body, and
+# assigning to the parameter leaves the global untouched. §2: a function body is
+# a scope whose parent is the global scope, and the parameter is a binding in
+# that scope, so the assignment finds it without walking out.
+--- source
+let x = 10;
+fn read(x) { return x + 1; }
+fn write(x) { x = x + 5; return x; }
+print read(1);
+print write(1);
+print x;
+--- expect
+2
+6
+10
