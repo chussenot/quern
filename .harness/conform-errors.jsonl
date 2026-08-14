@@ -1,0 +1,24 @@
+{"at":"2026-08-14T08:33:54Z","agent":"conform-errors","tool":"pact","argv":"pact msg inbox","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:34:01Z","agent":"conform-errors","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a","secs":0.045,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:34:10Z","agent":"conform-errors","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:34:11Z","agent":"conform-errors","tool":"bd","argv":"bd update bd_30-agents-2jk.25 --claim","secs":0.389,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:34:11Z","agent":"conform-errors","tool":"bd","argv":"bd show bd_30-agents-2jk.25","secs":0.383,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:37:49Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/error.rs","secs":0.019,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:37:49Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/output.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:37:50Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/value.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:37:50Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/front/token.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:37:50Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/front/parser.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch rm treadle/treadle/src/error.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch rm treadle/treadle/src/output.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch rm treadle/treadle/src/value.rs","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch rm treadle/treadle/src/front/token.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch rm treadle/treadle/src/front/parser.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/error.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/output.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/value.rs","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/front/token.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:00Z","agent":"conform-errors","tool":"pact","argv":"pact watch add treadle/src/front/parser.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:08Z","agent":"conform-errors","tool":"pact","argv":"pact lease acquire  treadle/tests/conform/301.tr treadle/tests/conform/302.tr treadle/tests/conform/303.tr treadle/tests/conform/304.tr treadle/tests/conform/305.tr treadle/tests/conform/306.tr treadle/tests/conform/307.tr treadle/tests/conform/308.tr treadle/tests/conform/309.tr treadle/tests/conform/310.tr treadle/tests/conform/311.tr treadle/tests/conform/312.tr treadle/tests/conform/313.tr tre","secs":0.019,"exit":1,"sigpipe":false,"stderr":"error: creating lock file /home/chussenot/Documents/quern/.pact/leases/ treadle__tests__conform__301.tr treadle__tests__conform__302.tr treadle__tests__conform__303.tr treadle__tests__conform__304.tr "}
+{"at":"2026-08-14T08:38:24Z","agent":"conform-errors","tool":"pact","argv":"pact lease acquire treadle/tests/conform/3*.tr --note bead .25 corpus: partial-output rule + exact error lines. 22 cases 301-322. NOTE pact bug: one acquire of 22 explicit paths fails with ENAMETOOLONG (it joins all paths into one lock filename), so this is the glob from the bead files: hint","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:38:24Z","agent":"conform-errors","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
