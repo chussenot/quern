@@ -55,7 +55,7 @@ fn engines() -> Vec<Box<dyn Engine>> {
     #[allow(unused_mut)]
     let mut engines: Vec<Box<dyn Engine>> = Vec::new();
     // Uncomment one line per engine as it lands, and drop the `#[ignore]`:
-    // engines.push(Box::new(treadle::vm::machine::Vm::new())); // bd .16 / .17
+    engines.push(Box::new(treadle::vm::Vm::new())); // bd .16 / .17
     // engines.push(Box::new(treadle::tree::eval::Interp::new())); // bd .19 / .20
     engines
 }
@@ -376,11 +376,6 @@ fn grade(path: &Path, case: &Case, engines: &mut [Box<dyn Engine>]) -> Graded {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "no type implements treadle::engine::Engine yet (src/vm/machine.rs and \
-            src/tree/eval.rs are stubs): blocked on bd_30-agents-2jk.16/.17 (vm) and \
-            bd_30-agents-2jk.19/.20 (tree). Add the engine to engines() and delete \
-            this attribute; nothing else in this file changes. The grading itself \
-            is already exercised by the fake-engine tests below."]
 fn every_case_against_every_engine() {
     let cases = load_corpus();
     let mut engines = engines();
