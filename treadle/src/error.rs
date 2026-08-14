@@ -177,6 +177,26 @@ impl TreadleError {
         }
     }
 
+    /// §6 `.42`: functions are one global namespace and a duplicate `fn` name is
+    /// a `Parse` error, reported at the second declaration. Both engines define
+    /// from `Program::fns` and neither may decide which of two same-named
+    /// declarations wins, so the front end refuses the program instead.
+    pub fn duplicate_fn(line: u32, name: &str) -> TreadleError {
+        TreadleError::Parse {
+            line,
+            msg: format!("duplicate function '{name}'"),
+        }
+    }
+
+    /// §6 `.42`: `len`, `str` and `int` are reserved as **function** names — a
+    /// `Parse` error to declare, though still legal as variable names.
+    pub fn reserved_fn_name(line: u32, name: &str) -> TreadleError {
+        TreadleError::Parse {
+            line,
+            msg: format!("cannot declare builtin function '{name}'"),
+        }
+    }
+
     // ---- Type ------------------------------------------------------------
 
     /// A binary operator applied to the wrong operand types. `want` names what

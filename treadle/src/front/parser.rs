@@ -22,16 +22,12 @@
 //! Every message is a constructor from `error.rs` (§4): the parser never
 //! formats an error string, it only names the token it found.
 
-// The statement half (bead `.12`) is the in-crate consumer of everything below,
-// and it has not landed yet, so on the lib target alone every item here is
-// unreachable and `dead_code` fires under `-D warnings`. Delete this attribute
-// with that bead — nothing else in the file depends on it.
-#![allow(dead_code)]
-
 use crate::error::{Result, TreadleError};
-use crate::front::ast::{BinOp, Expr, UnOp};
+use crate::front::ast::{BinOp, Expr, FnDecl, Program, Stmt, UnOp};
+use crate::front::lexer::tokenize;
 use crate::front::token::{Token, TokenKind};
 use crate::value::Value;
+use std::rc::Rc;
 
 /// How a token is named inside a `Parse` message. `error.rs` wants the
 /// source-level vocabulary already quoted (`expected(line, "';'", "'}'")`), but
@@ -293,6 +289,213 @@ fn call_args(c: &mut Cursor) -> Result<Vec<Expr>> {
     }
     c.expect(&TokenKind::RParen)?;
     Ok(args)
+}
+
+// ---- statements (bead `.12`) ---------------------------------------------
+
+/// Source to `Program`, the whole front end. Lexes and parses; every failure is
+/// a `Lex` or `Parse` error, so both engines start from a `Program` that is
+/// structurally valid and neither raises an error the other could miss.
+pub fn parse(src: &str) -> Result<Program> {
+    let mut p = Stmts {
+        c: Cursor::new(tokenize(src)?),
+        fns: Vec::new(),
+        declared: Vec::new(),
+    };
+    let mut stmts = Vec::new();
+    // `advance` clamps at `Eof`, so this loop terminates only because every arm
+    // of `statement` consumes at least one token.
+    while !p.c.at_end() {
+        stmts.push(p.statement(false)?);
+    }
+    Ok(Program { stmts, fns: p.fns })
+}
+
+/// The statement half's state: the shared [`Cursor`] plus the hoisted function
+/// list being accumulated.
+struct Stmts {
+    c: Cursor,
+    /// Every `FnDecl` in the program, at any nesting depth, in **source order**
+    /// — `ast.rs`'s hoisting contract. `Stmt::Fn` stays in `stmts` where it was
+    /// written and is a run-time no-op; both engines define from here only.
+    fns: Vec<Rc<FnDecl>>,
+    /// Function names seen so far, recorded at the declaration's *header* rather
+    /// than when it is pushed to `fns`, so `fn f() { fn f() {} }` is caught too
+    /// (the enclosing declaration does not reach `fns` until its body is parsed).
+    declared: Vec<String>,
+}
+
+impl Stmts {
+    /// One statement. `in_fn` is whether we are inside a function body, which
+    /// §2 makes part of the grammar: `return` outside one is a `Parse` error.
+    fn statement(&mut self, in_fn: bool) -> Result<Stmt> {
+        match self.c.peek().kind {
+            TokenKind::Let => self.let_stmt(),
+            TokenKind::Print => self.print_stmt(),
+            TokenKind::If => self.if_stmt(in_fn),
+            TokenKind::While => self.while_stmt(in_fn),
+            TokenKind::Fn => self.fn_stmt(),
+            TokenKind::Return => self.return_stmt(in_fn),
+            TokenKind::Ident(_) => self.assign_stmt(),
+            // Everything else, `=` included (reported as `unexpected '='` by
+            // `Cursor::expected`). No expression statement is reachable from
+            // here, which is §6 `.44`.
+            _ => Err(self.c.expected("statement")),
+        }
+    }
+
+    /// A braced body, the only kind §6 `.46` allows for `if`/`else`/`while`/`fn`.
+    ///
+    /// An **empty** body is legal — `fn f() { }`, `if c { }`, `while c { }`.
+    /// Bead `.64` asked and §6 never answered; corpus case `208` requires it, an
+    /// empty `els` is already the only spelling of an else-less `if`, and the
+    /// natural loop below accepts it, so legal is both the cheap and the
+    /// consistent reading.
+    fn block(&mut self, in_fn: bool) -> Result<Vec<Stmt>> {
+        self.c.expect(&TokenKind::LBrace)?;
+        let mut stmts = Vec::new();
+        while !self.c.eat(&TokenKind::RBrace) {
+            // Checked here rather than left to `statement`, so a truncated
+            // program says `expected '}', found end of input` (corpus `319`)
+            // instead of naming whatever statement could have come next.
+            if self.c.at_end() {
+                return Err(self.c.expected(&describe(&TokenKind::RBrace)));
+            }
+            stmts.push(self.statement(in_fn)?);
+        }
+        Ok(stmts)
+    }
+
+    fn let_stmt(&mut self) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        let (name, _) = self.c.ident()?;
+        // §6 `.46`: a `let` always has an initialiser, so `let x;` is a `Parse`
+        // error rather than a binding to `nil`.
+        self.c.expect(&TokenKind::Eq)?;
+        let init = parse_expr(&mut self.c)?;
+        self.c.expect(&TokenKind::Semi)?;
+        Ok(Stmt::Let { name, init, line })
+    }
+
+    /// Assignment, and the only statement that starts with a name.
+    ///
+    /// **This is where `f();` fails** (§6 `.44`): there is no expression
+    /// statement and the frozen `Stmt` has no variant for one, so after an
+    /// identifier an `=` is required and a call reports
+    /// `expected '=', found '('`.
+    fn assign_stmt(&mut self) -> Result<Stmt> {
+        let (name, line) = self.c.ident()?;
+        self.c.expect(&TokenKind::Eq)?;
+        let value = parse_expr(&mut self.c)?;
+        self.c.expect(&TokenKind::Semi)?;
+        Ok(Stmt::Assign { name, value, line })
+    }
+
+    /// `print e (, e)* ;` — **one or more** arguments, no trailing comma
+    /// (§6 `.46`). Requiring the first expression before the loop is what gives
+    /// the `>= 1`.
+    fn print_stmt(&mut self) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        let mut args = vec![parse_expr(&mut self.c)?];
+        while self.c.eat(&TokenKind::Comma) {
+            args.push(parse_expr(&mut self.c)?);
+        }
+        self.c.expect(&TokenKind::Semi)?;
+        Ok(Stmt::Print { args, line })
+    }
+
+    /// `if cond { .. }`, optionally `else { .. }` or `else if ..`.
+    ///
+    /// An `else if` chain is `els: vec![Stmt::If { .. }]` (§6 `.46`) — one nested
+    /// statement, not a flattened list of arms — and because every body is
+    /// braced there is no dangling-else question to answer.
+    fn if_stmt(&mut self, in_fn: bool) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        let cond = parse_expr(&mut self.c)?;
+        let then = self.block(in_fn)?;
+        let els = if self.c.eat(&TokenKind::Else) {
+            if matches!(self.c.peek().kind, TokenKind::If) {
+                vec![self.if_stmt(in_fn)?]
+            } else {
+                self.block(in_fn)?
+            }
+        } else {
+            Vec::new()
+        };
+        Ok(Stmt::If {
+            cond,
+            then,
+            els,
+            line,
+        })
+    }
+
+    fn while_stmt(&mut self, in_fn: bool) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        let cond = parse_expr(&mut self.c)?;
+        let body = self.block(in_fn)?;
+        Ok(Stmt::While { cond, body, line })
+    }
+
+    /// `return;` or `return e;`, and **only inside a function**: §2 makes
+    /// `return` at top level a `Parse` error, so corpus `317` sees no output at
+    /// all from a program whose first line is a `print`.
+    fn return_stmt(&mut self, in_fn: bool) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        if !in_fn {
+            return Err(TreadleError::return_outside_fn(line));
+        }
+        let value = if self.c.eat(&TokenKind::Semi) {
+            None
+        } else {
+            let value = parse_expr(&mut self.c)?;
+            self.c.expect(&TokenKind::Semi)?;
+            Some(value)
+        };
+        Ok(Stmt::Return { value, line })
+    }
+
+    /// A function declaration, which is both a `Stmt::Fn` where it was written
+    /// and an entry in `Program::fns` (§2 hoists to global; `ast.rs` pins that
+    /// the statement stays in place and is a no-op at run time).
+    fn fn_stmt(&mut self) -> Result<Stmt> {
+        let line = self.c.advance().line;
+        let (name, name_line) = self.c.ident()?;
+        // §6 `.42`: the three builtins are reserved as function names, and a
+        // duplicate `fn` name is a `Parse` error — both engines define from
+        // `fns` and neither may pick a winner between two same-named entries.
+        if matches!(name.as_str(), "len" | "str" | "int") {
+            return Err(TreadleError::reserved_fn_name(name_line, &name));
+        }
+        if self.declared.iter().any(|n| n == &name) {
+            return Err(TreadleError::duplicate_fn(name_line, &name));
+        }
+        self.declared.push(name.clone());
+        self.c.expect(&TokenKind::LParen)?;
+        let mut params = Vec::new();
+        if !self.c.eat(&TokenKind::RParen) {
+            loop {
+                params.push(self.c.ident()?.0);
+                if !self.c.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.c.expect(&TokenKind::RParen)?;
+        }
+        // The slot is taken before the body is parsed, so a nested declaration
+        // (which pushes from inside `block`) lands *after* its enclosing one and
+        // `fns` is in source order rather than innermost-first.
+        let slot = self.fns.len();
+        let body = self.block(true)?;
+        let decl = Rc::new(FnDecl {
+            name,
+            params,
+            body,
+            line,
+        });
+        self.fns.insert(slot, Rc::clone(&decl));
+        Ok(Stmt::Fn(decl))
+    }
 }
 
 #[cfg(test)]
@@ -609,5 +812,452 @@ mod tests {
         assert_eq!(e.variant(), "Parse");
         assert_eq!(e.line(), 2);
         assert_eq!(e.msg(), "expected identifier, found 'let'");
+    }
+
+    // ---- statements (bead `.12`) -----------------------------------------
+
+    fn prog(src: &str) -> Program {
+        parse(src).expect("parses")
+    }
+
+    /// A whole program that must fail, yielding (variant, line, message).
+    fn perr(src: &str) -> (&'static str, u32, String) {
+        let e = parse(src).expect_err("must not parse");
+        (e.variant(), e.line(), e.msg().to_string())
+    }
+
+    /// The statement counterpart of [`shape`]: bracketed, so nesting is
+    /// unambiguous in one string (`Stmt` has no `PartialEq` by ast's decision).
+    fn sshape(s: &Stmt) -> String {
+        match s {
+            Stmt::Let { name, init, .. } => format!("(let {name} {})", shape(init)),
+            Stmt::Assign { name, value, .. } => format!("(set {name} {})", shape(value)),
+            Stmt::Print { args, .. } => {
+                let args: Vec<String> = args.iter().map(shape).collect();
+                format!("(print [{}])", args.join(" "))
+            }
+            Stmt::If {
+                cond, then, els, ..
+            } => format!("(if {} [{}] [{}])", shape(cond), body(then), body(els)),
+            Stmt::While { cond, body: b, .. } => format!("(while {} [{}])", shape(cond), body(b)),
+            Stmt::Return { value: Some(e), .. } => format!("(return {})", shape(e)),
+            Stmt::Return { value: None, .. } => "(return)".to_string(),
+            Stmt::Fn(d) => format!(
+                "(fn {} ({}) [{}])",
+                d.name,
+                d.params.join(" "),
+                body(&d.body)
+            ),
+        }
+    }
+
+    fn body(stmts: &[Stmt]) -> String {
+        let rendered: Vec<String> = stmts.iter().map(sshape).collect();
+        rendered.join(" ")
+    }
+
+    #[test]
+    fn let_assign_and_print_statements() {
+        assert_eq!(body(&prog("let x = 1 + 2;").stmts), "(let x (Add 1 2))");
+        assert_eq!(body(&prog("x = x + 1;").stmts), "(set x (Add x 1))");
+        // `print` takes one or more arguments, in source order (§6 `.46`, `.33`)
+        assert_eq!(body(&prog("print 1;").stmts), "(print [1])");
+        assert_eq!(
+            body(&prog(r#"print "a", x, true;"#).stmts),
+            "(print [a x true])"
+        );
+        // several statements, in order, and each carries its own line
+        let p = prog("let x = 0;\nx = 1;\nprint x;");
+        assert_eq!(p.stmts.len(), 3);
+        let lines: Vec<u32> = p
+            .stmts
+            .iter()
+            .map(|s| match s {
+                Stmt::Let { line, .. } | Stmt::Assign { line, .. } | Stmt::Print { line, .. } => {
+                    *line
+                }
+                other => panic!("parsed as {other:?}"),
+            })
+            .collect();
+        assert_eq!(lines, [1, 2, 3]);
+    }
+
+    /// `while` and `if` bodies nest, and treadle has no standalone block
+    /// statement — the frozen `Stmt` has no `Block` variant — so "nested blocks"
+    /// are exactly these braced bodies.
+    #[test]
+    fn nested_blocks_nest_to_any_depth() {
+        let src = "while a < 1 { while b < 2 { if c { print 1; } } }";
+        assert_eq!(
+            body(&prog(src).stmts),
+            "(while (Lt a 1) [(while (Lt b 2) [(if c [(print [1])] [])])])"
+        );
+        // §6 `.37`: a body is a scope, and the parser keeps the nesting that
+        // makes shadowing expressible
+        assert_eq!(
+            body(&prog("let x = 1; while true { let x = 2; print x; }").stmts),
+            "(let x 1) (while true [(let x 2) (print [x])])"
+        );
+    }
+
+    /// An `if` with no `else` is `els: vec![]` — the only spelling of it, which
+    /// is also why an empty braced body has to be legal.
+    #[test]
+    fn if_without_else_has_an_empty_els() {
+        match &prog("if x { print 1; }").stmts[0] {
+            Stmt::If { then, els, .. } => {
+                assert_eq!(then.len(), 1);
+                assert!(els.is_empty(), "no else means an empty els");
+            }
+            other => panic!("parsed as {other:?}"),
+        }
+        assert_eq!(
+            body(&prog("if x { print 1; } else { print 2; }").stmts),
+            "(if x [(print [1])] [(print [2])])"
+        );
+    }
+
+    /// §6 `.46`: `else if` chains as `els: vec![Stmt::If { .. }]`, so corpus case
+    /// `106`'s three-arm chain is three nested `If`s and exactly one arm runs.
+    #[test]
+    fn else_if_chains_as_a_nested_if() {
+        let src = "if n == 1 { print 1; } else if n == 2 { print 2; } else { print 3; }";
+        assert_eq!(
+            body(&prog(src).stmts),
+            "(if (Eq n 1) [(print [1])] [(if (Eq n 2) [(print [2])] [(print [3])])])"
+        );
+        // the nested arm really is a single Stmt::If, not a flattened list
+        match &prog(src).stmts[0] {
+            Stmt::If { els, .. } => {
+                assert_eq!(els.len(), 1);
+                assert!(matches!(els[0], Stmt::If { .. }));
+            }
+            other => panic!("parsed as {other:?}"),
+        }
+        // an `else if` with no final `else` bottoms out at an empty els
+        assert_eq!(
+            body(&prog("if a { print 1; } else if b { print 2; }").stmts),
+            "(if a [(print [1])] [(if b [(print [2])] [])])"
+        );
+    }
+
+    /// Bead `.64`, answered here because §6 does not: an empty braced body is
+    /// **legal** in all three places one can appear. Corpus case `208`
+    /// (`fn empty() { }` returning `nil`) depends on it.
+    #[test]
+    fn empty_braced_bodies_are_legal() {
+        assert_eq!(body(&prog("fn f() { }").stmts), "(fn f () [])");
+        assert_eq!(body(&prog("if c { }").stmts), "(if c [] [])");
+        assert_eq!(body(&prog("while c { }").stmts), "(while c [])");
+        assert_eq!(
+            body(&prog("if c { } else { }").stmts),
+            "(if c [] [])" // an empty else is indistinguishable from none
+        );
+        // a whole program may also be empty
+        let p = prog("");
+        assert!(p.stmts.is_empty() && p.fns.is_empty());
+    }
+
+    #[test]
+    fn fn_declarations_take_zero_one_or_many_params() {
+        assert_eq!(
+            body(&prog("fn add(a, b) { return a + b; }").stmts),
+            "(fn add (a b) [(return (Add a b))])"
+        );
+        assert_eq!(
+            body(&prog("fn f() { return; }").stmts),
+            "(fn f () [(return)])"
+        );
+        assert_eq!(
+            body(&prog("fn g(x) { print x; }").stmts),
+            "(fn g (x) [(print [x])])"
+        );
+        // the `fn` keyword's line is the declaration's line
+        match &prog("\n\nfn f() { }").stmts[0] {
+            Stmt::Fn(d) => assert_eq!(d.line, 3),
+            other => panic!("parsed as {other:?}"),
+        }
+    }
+
+    /// `ast.rs`'s hoisting contract: `fns` is the complete list at any nesting
+    /// depth in source order, the `Rc` in `stmts` is the *same* allocation, and
+    /// `Stmt::Fn` stays where it was written.
+    #[test]
+    fn fns_are_hoisted_at_every_depth_in_source_order() {
+        let p = prog(
+            "fn outer(n) {\n\
+             fn inner() { return 1; }\n\
+             return inner();\n\
+             }\n\
+             if false { fn dead() { return 2; } }\n\
+             while false { fn looped() { return 3; } }\n\
+             fn last() { return 4; }\n",
+        );
+        let names: Vec<&str> = p.fns.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["outer", "inner", "dead", "looped", "last"]);
+        // a fn inside a branch that never runs is still callable (§2 hoisting),
+        // and its Stmt::Fn is still inside that branch
+        assert_eq!(
+            body(&p.stmts),
+            "(fn outer (n) [(fn inner () [(return 1)]) (return (call inner []))]) \
+             (if false [(fn dead () [(return 2)])] []) \
+             (while false [(fn looped () [(return 3)])]) \
+             (fn last () [(return 4)])"
+        );
+        // the two references are one allocation, so an engine defining from
+        // `fns` and one walking `stmts` cannot see different bodies
+        match &p.stmts[0] {
+            Stmt::Fn(d) => assert!(Rc::ptr_eq(d, &p.fns[0])),
+            other => panic!("parsed as {other:?}"),
+        }
+    }
+
+    /// §2: `return` leaves the function from any depth, and the parser accepts it
+    /// anywhere inside a body — corpus `210` returns from two nested loops.
+    #[test]
+    fn return_is_accepted_at_any_depth_inside_a_fn() {
+        let src = "fn find(n) { while a { while b { if c { return 1; } } } return -1; }";
+        assert_eq!(
+            body(&prog(src).stmts),
+            "(fn find (n) [(while a [(while b [(if c [(return 1)] [])])]) (return (Neg 1))])"
+        );
+        // a return inside a nested fn belongs to that fn, not the outer one
+        assert!(parse("fn a() { fn b() { return 1; } return 2; }").is_ok());
+    }
+
+    /// §2/§6, corpus `317`: `return` outside a function is a **Parse** error, so
+    /// nothing runs and there is no output. The parser therefore has to track
+    /// whether it is inside a body.
+    #[test]
+    fn return_outside_a_fn_is_a_parse_error() {
+        assert_eq!(
+            perr("print 1;\nreturn 2;"),
+            ("Parse", 2, "return outside of a function".to_string())
+        );
+        // corpus 317's exact rendering
+        assert_eq!(
+            parse("print 1;\nreturn 2;")
+                .expect_err("must not parse")
+                .to_string(),
+            "error: Parse at line 2: return outside of a function"
+        );
+        // a bare `return;` at top level, and one nested in top-level blocks:
+        // being inside braces is not being inside a function
+        assert_eq!(
+            perr("return;"),
+            ("Parse", 1, "return outside of a function".to_string())
+        );
+        assert_eq!(
+            perr("if true {\n  return 1;\n}"),
+            ("Parse", 2, "return outside of a function".to_string())
+        );
+        assert_eq!(
+            perr("while true {\n  if x {\n    return;\n  }\n}"),
+            ("Parse", 3, "return outside of a function".to_string())
+        );
+    }
+
+    /// §6 `.44`: there are no expression statements. `f();` is a `Parse` error —
+    /// call for effect with `print f();` or `let _ = f();`, both of which parse.
+    #[test]
+    fn a_call_is_not_a_statement() {
+        assert_eq!(
+            perr("f();"),
+            ("Parse", 1, "expected '=', found '('".to_string())
+        );
+        assert_eq!(
+            perr("1;"),
+            ("Parse", 1, "expected statement, found '1'".to_string())
+        );
+        assert_eq!(
+            perr("x + 1;"),
+            ("Parse", 1, "expected '=', found '+'".to_string())
+        );
+        // the two spellings §6 offers instead
+        assert_eq!(body(&prog("print f();").stmts), "(print [(call f [])])");
+        assert_eq!(body(&prog("let _ = f();").stmts), "(let _ (call f []))");
+    }
+
+    /// §2: `=` is a statement token. Corpus `318` pins the wording, including
+    /// that it is `unexpected '='` and not `expected ')', found '='`.
+    #[test]
+    fn assignment_is_never_an_expression_in_a_statement() {
+        assert_eq!(
+            perr("let x = 1;\nlet y = 2;\nx = (y = 1);"),
+            ("Parse", 3, "unexpected '='".to_string())
+        );
+        assert_eq!(
+            parse("let x = 1;\nlet y = 2;\nx = (y = 1);")
+                .expect_err("must not parse")
+                .to_string(),
+            "error: Parse at line 3: unexpected '='"
+        );
+        // in a condition, and chained
+        assert_eq!(
+            perr("if (x = 1) { }"),
+            ("Parse", 1, "unexpected '='".to_string())
+        );
+        assert_eq!(
+            perr("while (x = 1) { }"),
+            ("Parse", 1, "unexpected '='".to_string())
+        );
+        assert_eq!(
+            perr("x = y = 1;"),
+            ("Parse", 1, "unexpected '='".to_string())
+        );
+        assert_eq!(
+            perr("let x = (y = 1);"),
+            ("Parse", 1, "unexpected '='".to_string())
+        );
+        assert_eq!(
+            perr("print (x = 1);"),
+            ("Parse", 1, "unexpected '='".to_string())
+        );
+        // and a statement that is only an `=`
+        assert_eq!(perr("= 1;"), ("Parse", 1, "unexpected '='".to_string()));
+    }
+
+    /// Every malformed statement is a `Parse` error at the line of the token that
+    /// was **found** (§6 `.46`), never the line of the unmatched opener.
+    #[test]
+    fn statement_errors_carry_the_right_line() {
+        // corpus 319: the missing `}` is reported at end of input, whose line is
+        // the line the LAST TOKEN ended on — 4, not the trailing newline's 5
+        assert_eq!(
+            perr("let x = 0;\nwhile x < 3 {\n  x = x + 1;\nprint x;\n"),
+            ("Parse", 4, "expected '}', found end of input".to_string())
+        );
+        // corpus 320: bodies are always braced (§6 `.46`)
+        assert_eq!(
+            perr("print 1;\nif true print 2;"),
+            ("Parse", 2, "expected '{', found 'print'".to_string())
+        );
+        assert_eq!(
+            perr("while x < 1 print 2;"),
+            ("Parse", 1, "expected '{', found 'print'".to_string())
+        );
+        // §6 `.46`: a `let` always has an initialiser
+        assert_eq!(
+            perr("let x;"),
+            ("Parse", 1, "expected '=', found ';'".to_string())
+        );
+        assert_eq!(
+            perr("let 1 = 2;"),
+            ("Parse", 1, "expected identifier, found '1'".to_string())
+        );
+        // §6 `.46`: `print` takes at least one argument, and no trailing comma
+        assert_eq!(perr("print;"), ("Parse", 1, "unexpected ';'".to_string()));
+        assert_eq!(
+            perr("print 1,;"),
+            ("Parse", 1, "unexpected ';'".to_string())
+        );
+        // missing semicolons, each at the token that was found
+        assert_eq!(
+            perr("let x = 1\nprint x;"),
+            ("Parse", 2, "expected ';', found 'print'".to_string())
+        );
+        assert_eq!(
+            perr("fn f() {\n  return 1\n}"),
+            ("Parse", 3, "expected ';', found '}'".to_string())
+        );
+        // a stray closing brace, and an `else` with no `if`
+        assert_eq!(
+            perr("}"),
+            ("Parse", 1, "expected statement, found '}'".to_string())
+        );
+        assert_eq!(
+            perr("else { }"),
+            ("Parse", 1, "expected statement, found 'else'".to_string())
+        );
+        // malformed parameter lists
+        assert_eq!(
+            perr("fn f(a,) { }"),
+            ("Parse", 1, "expected identifier, found ')'".to_string())
+        );
+        assert_eq!(
+            perr("fn f a) { }"),
+            ("Parse", 1, "expected '(', found 'a'".to_string())
+        );
+        assert_eq!(
+            perr("fn 1() { }"),
+            ("Parse", 1, "expected identifier, found '1'".to_string())
+        );
+    }
+
+    /// §6 `.42`: functions are one global namespace — a duplicate `fn` name is a
+    /// `Parse` error at the second declaration, and `len`/`str`/`int` cannot be
+    /// declared at all. `env.rs` relies on both: its `define_fn` overwrite is
+    /// documented as unreachable.
+    #[test]
+    fn duplicate_and_reserved_fn_names_are_parse_errors() {
+        assert_eq!(
+            perr("fn f() { }\nfn f() { }"),
+            ("Parse", 2, "duplicate function 'f'".to_string())
+        );
+        // at any nesting depth, in either direction, since hoisting is global
+        assert_eq!(
+            perr("fn f() {\n  fn f() { }\n}"),
+            ("Parse", 2, "duplicate function 'f'".to_string())
+        );
+        assert_eq!(
+            perr("fn a() { }\nif x {\n  fn a() { }\n}"),
+            ("Parse", 3, "duplicate function 'a'".to_string())
+        );
+        for name in ["len", "str", "int"] {
+            assert_eq!(
+                perr(&format!("fn {name}() {{ }}")),
+                (
+                    "Parse",
+                    1,
+                    format!("cannot declare builtin function '{name}'")
+                )
+            );
+        }
+        // but they are ordinary variable names (§6 `.42`: two namespaces), and a
+        // `let` may share a name with a function
+        assert!(parse("let len = 1; print len;").is_ok());
+        assert!(parse("fn f() { }\nlet f = 1;").is_ok());
+    }
+
+    /// A `Lex` error reaches the caller of `parse` unchanged, so a bad byte or an
+    /// out-of-range literal is reported as `Lex` and not repackaged as `Parse`.
+    #[test]
+    fn lex_errors_pass_through_parse() {
+        assert_eq!(
+            perr("print 99999999999999999999;"),
+            (
+                "Lex",
+                1,
+                "integer literal out of range: 99999999999999999999".to_string()
+            )
+        );
+        assert_eq!(
+            perr("print 1;\n@"),
+            ("Lex", 2, "unexpected character '@'".to_string())
+        );
+    }
+
+    /// The §2 sample program, whole, as one end-to-end check that the two halves
+    /// meet: every statement form and both hoisting paths in one parse.
+    #[test]
+    fn the_spec_sample_program_parses() {
+        let p = prog(
+            "let x = 1;\n\
+             x = x + 1;\n\
+             print x;\n\
+             print \"a\", x, true;\n\
+             if x > 2 { print 1; } else { print 2; }\n\
+             while x < 10 { x = x + 1; }\n\
+             fn add(a, b) { return a + b; }\n\
+             print add(1, 2);\n\
+             fn fact(n) { if n < 2 { return 1; } return n * fact(n - 1); }\n",
+        );
+        assert_eq!(p.stmts.len(), 9);
+        let names: Vec<&str> = p.fns.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["add", "fact"]);
+        assert_eq!(
+            sshape(&p.stmts[8]),
+            "(fn fact (n) [(if (Lt n 2) [(return 1)] []) (return (Mul n (call fact [(Sub n 1)])))])"
+        );
     }
 }
