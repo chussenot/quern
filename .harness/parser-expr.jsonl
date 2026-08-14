@@ -1,0 +1,23 @@
+{"at":"2026-08-14T08:41:51Z","agent":"parser-expr","tool":"pact","argv":"pact msg inbox","secs":0.031,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:41:58Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-127c549df7cf95ec","secs":0.058,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:41:58Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-8a3e97dde61362a6","secs":0.037,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:06Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-f928f353760aeef3","secs":0.031,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:07Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-fe57c1bb128913d7","secs":0.032,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:07Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-6156f17f938c5787","secs":0.031,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:19Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-fe57c1bb128913d7 --json","secs":0.046,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:27Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a --json","secs":0.051,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:38Z","agent":"parser-expr","tool":"pact","argv":"pact lease ls","secs":0.020,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:38Z","agent":"parser-expr","tool":"bd","argv":"bd update bd_30-agents-2jk.11 --claim","secs":0.335,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:38Z","agent":"parser-expr","tool":"bd","argv":"bd show bd_30-agents-2jk.11","secs":0.330,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"parser-expr","tool":"pact","argv":"pact lease acquire treadle/src/front/parser.rs --note bd_30-agents-2jk.11: expression half of the parser — cursor + precedence ladder, parser-stmt (.12) blocked on the cursor API","secs":0.036,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"parser-expr","tool":"pact","argv":"pact watch add treadle/src/front/ast.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"parser-expr","tool":"pact","argv":"pact watch add treadle/src/error.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"parser-expr","tool":"pact","argv":"pact watch add treadle/src/front/token.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"parser-expr","tool":"pact","argv":"pact watch add treadle/src/value.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:59Z","agent":"parser-expr","tool":"pact","argv":"pact lease release treadle/treadle/src/front/parser.rs","secs":0.019,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:59Z","agent":"parser-expr","tool":"pact","argv":"pact lease acquire src/front/parser.rs --note bd_30-agents-2jk.11: expression half of the parser — cursor + precedence ladder, parser-stmt (.12) blocked on the cursor API","secs":0.048,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:59Z","agent":"parser-expr","tool":"pact","argv":"pact watch ls","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/front/ast.rs","secs":0.020,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/error.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/front/token.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/value.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}

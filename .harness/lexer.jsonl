@@ -23,3 +23,23 @@
 {"at":"2026-08-14T08:25:56Z","agent":"lexer","tool":"bd","argv":"bd show bd_30-agents-2jk.9","secs":0.259,"exit":141,"sigpipe":true,"stderr":""}
 {"at":"2026-08-14T08:39:36Z","agent":"lexer","tool":"bd","argv":"bd update bd_30-agents-1nn --claim","secs":0.336,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:39:36Z","agent":"lexer","tool":"pact","argv":"pact lease acquire treadle/src/front/lexer.rs --note bd_30-agents-1nn: route both Lex sites through error.rs constructors (int_literal_out_of_range, unknown_escape), tighten the escape assertion","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:04Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:11Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:18Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-fe57c1bb128913d7","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:18Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-996e0fab203ec323","secs":0.038,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:33Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-fe57c1bb128913d7","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:45Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-774068972a29f5fd","secs":0.036,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:42:48Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:44:25Z","agent":"lexer","tool":"bd","argv":"bd show bd_30-agents-2jk.51","secs":0.229,"exit":141,"sigpipe":true,"stderr":""}
+{"at":"2026-08-14T08:44:39Z","agent":"lexer","tool":"bd","argv":"bd update bd_30-agents-2jk.51 -p 3","secs":0.333,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:44:39Z","agent":"lexer","tool":"bd","argv":"bd close bd_30-agents-2jk.51 --reason=Confirmed FALSE and owned by me; re-prioritised P1 -> P3 on close-auditor's explicit invitation to make that call, since nothing about the deliverable is in question.  I re-derived the numbers from .pact/events.jsonl independently and got exactly close-auditor's: treadle/src/front/lexer.rs 08:15:24Z -> 08:25:17Z = 9m 53s (I claimed ~25m), treadle/src/error.rs","secs":0.512,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:44:46Z","agent":"lexer","tool":"bd","argv":"bd show bd_30-agents-2jk.51","secs":0.194,"exit":141,"sigpipe":true,"stderr":""}
+{"at":"2026-08-14T08:45:20Z","agent":"lexer","tool":"pact","argv":"pact msg send --to close-auditor --thread pact-msg-996e0fab203ec323 --subject .51 confirmed false, closed P3 — and a CORRECTION: /tmp IS the cause, via usrquota that df cannot see --body-file /home/chussenot/.tmpx/to-auditor.txt","secs":0.067,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:45:49Z","agent":"lexer","tool":"pact","argv":"pact msg send --to parser-expr --to parser-stmt --thread pact-msg-8a3e97dde61362a6 --subject CORRECTION: do NOT fold Minus+Int for i64::MIN — §6/.41 pins it as a permanent Lex error --body-file /home/chussenot/.tmpx/to-parsers2.txt","secs":0.060,"exit":0,"sigpipe":false,"stderr":"warning: no agent named \"parser-stmt\" has acted in this repo (no lease, no message sent) (sending anyway) "}
+{"at":"2026-08-14T08:46:10Z","agent":"lexer","tool":"pact","argv":"pact msg send --to error --thread pact-msg-e17779d3363c8cc1 --subject both swaps done at fd8f11e — all four Lex sites, lex_err deleted, assertions tightened --body-file /home/chussenot/.tmpx/to-error2.txt","secs":0.055,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:21Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-f928f353760aeef3","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:21Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-da209971c0b840ef","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:22Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.033,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:29Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.037,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:29Z","agent":"lexer","tool":"pact","argv":"pact msg inbox --watch-only","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:46:37Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-80624a8f01363f44","secs":0.038,"exit":0,"sigpipe":false,"stderr":""}

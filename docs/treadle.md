@@ -81,6 +81,16 @@ errors. Pinned here because an engine that accepted assignment as an expression
 would diverge from one that did not, and the fuzzer would report it as a bug in
 whichever engine you happened to blame.
 
+**Every binary operator is LEFT-associative**, and parenthesised grouping
+exists at the tightest rung alongside literals and variables. So `1 - 2 - 3`
+is `-4`, not `2`, and `12 / 3 / 2` is `2`, not `8`. Pinned because the table
+above fixes only the rungs: a ladder written as a loop comes out
+left-associative and one written by recursing on the rhs comes out
+right-associative, and both are natural readings of "the ladder reads
+top-to-bottom" — the two engines would have agreed only by luck (bead `.54`).
+Rust's own associativity, consistent with the Rust-semantics rule used for
+`/` and `%`.
+
 `and` and `or` **short-circuit**: the right operand is not evaluated when the
 left decides the answer. This is observable through `print` inside a call, so
 both engines must do it, and the fuzzer will find it if one does not.
@@ -274,6 +284,27 @@ to a minimal reproduction is worth building if time allows; say so either way.
 `cargo fmt --check` clean, `#![forbid(unsafe_code)]`, zero dependencies beyond
 `rand` (dev-only, for the fuzzer's seeded generator). Anything else needs a
 comment arguing for it.
+
+## 6a. Error wording: the landed `value.rs` is the spec (bead `.55`)
+
+Bead `.39` proposed a table of operator and builtin error messages. It never
+landed. `value.rs` did, and is frozen, and `error.rs` adopted its exact strings
+and added a test that calls the real `Value::div/rem/add/sub/neg/cmp_value/
+eq_value/as_bool` and asserts each error equals the matching constructor. So:
+
+**Where `.39`'s proposal and the merged `value.rs` disagree, `value.rs` wins.**
+The wording is `+ expects Int or Str operands, got Int and Bool`,
+`- expects a Int operand, got Bool`, `expected Bool, got Int`,
+`== expects two values of the same type, got Int and Str`,
+`< expects two Int or two Str operands, got Bool and Int`. Corpus authors
+assert those. `.39`'s table is superseded, not pending.
+
+One consequence, accepted deliberately: because §6/`.40` routes both the
+`if`/`while` condition and the `and`/`or` operands through one `as_bool`, they
+produce the **same** message and no corpus case can tell them apart. That is
+fine. §4 requires only that the two *engines* agree, and they do; distinguishing
+them would need two constructors plus a rule about which applies where, which
+is new drift surface for no observable benefit.
 
 ## 6. Pinned edges
 
