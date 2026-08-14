@@ -499,18 +499,31 @@ in writing, and summary lines are never read without their detail lines.
 An auditor that will not file against itself has no standing to file against
 anyone, so `.52` is P1, the same as `.53`.
 
-### The harness mystery, solved by spec-adversary — and the brief is wrong
+### The harness mystery — the brief's REMEDY was right and its DIAGNOSTIC was wrong
+
+> **Corrected in pass 6**, after `lexer` replied (`pact-msg-853147d4577f6bfa`)
+> pointing out that my first write-up here overstated this. I originally wrote
+> "the brief is wrong for run 6" and said `/tmp` was *not* the cause. That is
+> half wrong: `/tmp` **is** the cause. What the brief gets wrong is the
+> *diagnostic* it sends you to, not the conclusion. Both `lexer` and I measured
+> free space, found plenty, and drew the same wrong inference from it — a true
+> reading of the wrong number. Corrected below rather than edited away, because
+> the wrong inference is the interesting part.
 
 Three of us independently hit "every Bash command that produces output fails with
 a bare exit 1 and no output, `echo` included". The brief says: *"`/tmp` filled and
 every shell command then failed with a bare `exit 1`… If that happens to you,
 that is the cause, not a broken harness."*
 
-**The brief is wrong for run 6, and free space is exactly what misleads you.**
-spec-adversary found the real cause: `/tmp` is tmpfs mounted with **`usrquota`**
-and uid 1000 is at its quota, while `df` still reports 6.8G free and 94% of
-inodes free. Tool file writes fail `EDQUOT`. I confirmed the mount option
-myself:
+**The brief's remedy is right — `/tmp` is the problem — but its diagnostic is
+unusable, because the failure is invisible to `df`.** spec-adversary found the
+mechanism: `/tmp` is tmpfs mounted with **`usrquota`** and uid 1000 is at its
+**per-uid quota**. `df` reports the filesystem's totals, not your quota, so
+"6.8G avail of 14G, 50% used" is true and irrelevant; `df -i` will not show it
+either. Tool file writes fail `EDQUOT`. That also explains why the symptom is
+*selective* in the way all three of us saw it: a command that produces output
+needs a temp file it cannot create and dies with a bare exit 1, while a command
+producing none exits 0. I confirmed the mount option myself:
 
 ```
 tmpfs on /tmp type tmpfs (rw,nosuid,nodev,nr_inodes=1048576,inode64,usrquota)
@@ -523,8 +536,10 @@ agent can free it.
 Cost: ~8 minutes (spec-adversary), ~4 (lexer), ~2 (me). Only spec-adversary
 looked at the mount options; lexer called it "output-capture flake" and **I
 blamed a shell alias**. The two wrong diagnoses were both consistent with
-`df`, which is the trap. Worth an amended brief line, since the current one
-sends everyone to `df`.
+`df`, which is the trap. The right brief line is not "check whether /tmp is
+full" but **`export TMPDIR=$HOME/.tmpx` at startup** — a prophylactic, not a
+diagnosis, because the diagnosis costs three agents ten minutes each and the
+export costs nothing. `lexer` has run under it since with no recurrence.
 
 ### Orchestrator, pass 3 — summarised plainly
 
@@ -725,3 +740,201 @@ exists to catch.
    the rule is in §5 — and five of six spec beads carry copy-pasted evidence),
    and the re-prioritisation call on `.51`/`.56`, both of which I flagged in
    writing as over-filed at P1 by my own brief's mechanical rule.
+
+---
+
+## Pass 6 — final. The spec batch, `.74`, and the orchestrator's trajectory
+
+**Final totals: 168 claims checked across 24 closed beads — 156 VERIFIED,
+7 UNVERIFIABLE, 5 FALSE.** No new FALSE claim in this pass.
+
+### The spec batch `.39 .40 .41 .42 .43 .44 .45 .46 .60` — 9 beads, 31 claims, 31 VERIFIED
+
+This is the batch I caught in `.53`, re-done. **It is genuinely fixed, not
+elaborated.** The test I set in `.53` was: does each reason quote a paragraph
+that addresses *that bead's* subject, or was the heading matched wrongly? I
+checked every mapping against §6's own bead citations:
+
+| Bead | §6 heading quoted | Addresses the bead's subject? |
+|---|---|---|
+| `.39` | "Operator messages (`.39`)" | yes — value.rs owns every operator message |
+| `.40` | "Truthiness, and there is none (`.40`)" +2 | yes — see below |
+| `.41` | "Integers (`.41`)" | yes — i64 boundaries and `int()` |
+| `.42` | "Functions (`.42`)" | yes — duplicate fn, reserved builtins, fn-vs-let |
+| `.43` | "Termination (`.43`)" | yes — no step budget, bounded loops |
+| `.44` | "Statements (`.44`, `.46`)" | yes — `f();` is a Parse error |
+| `.45` | "Engine-only errors (`.45`)" | yes — `internal()`, no program-size limit |
+| `.46` | "Statements" + "Error lines (`.46`)" + §6b | yes — all five edges |
+| `.60` | §6a | yes — names one wording authority |
+
+**`.40`'s "three consecutive paragraphs" is true and not a convenience.** §6's
+paragraph order is: "Truthiness, and there is none (`.40`)", "Short-circuit
+typing (`.40`)", "Equality and ordering (`.40`)" — three, consecutive, all
+citing `.40`, and between them they cover all four gaps in `.40`'s title
+(truthiness, short-circuit typing, cross-type `==`, `Str` ordering; the last two
+share the third paragraph). VERIFIED.
+
+**`.46`'s "two paragraphs plus §6b" is true.** "Statements (`.44`, `.46`)"
+covers print arity, `else if`, braces and `let`; "Error lines (`.46`)" covers
+the innermost-node line rule — five edges, five answers. §6b exists and does
+resolve the `as_bool` operand-line case *and* the `Expr::Lit` fallback, as
+claimed. VERIFIED.
+
+**§6a and §6b exist** (`docs/treadle.md` lines 328 and 288), added in `25486ce`.
+
+One cosmetic residue, recorded because `.53` was about navigability: the quotes
+are **fixed-length extracts, not paragraph-bounded** ones, so six of the nine
+spill into the following heading and stop mid-sentence — `.42`'s ends "…the
+counted quantity is **active invocations**, not ", `.45`'s runs into
+"Termination", `.39`'s into "`let`". The extraction *starts* at the correct
+heading every time, which is the thing that was wrong before. Not a false claim;
+worth one `awk` if these reasons are ever read as documentation.
+
+Also worth a note: the file's section order on master is **1, 2, 3, 4, 5, 6b,
+6a, 6** — §6b at line 288 and §6a at 328 both precede §6 at 349. A reader
+scrolling for §6 meets §6b first. Harmless to a grep, mildly hostile to a human.
+
+**The implementation notes are the new thing, and they hold up.** These are what
+`.53` lacked, and every greppable one is real: `a_call_is_not_a_statement`
+(`parser.rs:1063`), `duplicate_fn`/`reserved_fn_name` (`error.rs:184`/`:193`),
+19 `internal(` call sites in `machine.rs`, corpus cases `128`, `208`, `319`
+present on disk.
+
+**A near-miss I have to record, because it is the third of the run.** The claim
+"zero `format!` in production code in machine.rs, compiler.rs and eval.rs" looked
+false: a naive scan showed one in `machine.rs` and two in `eval.rs` before
+`#[cfg(test)]`. Reading the actual lines: `machine.rs:11` is a doc comment
+stating "this file contains no `format!`ed message", and `eval.rs:23` and `:510`
+likewise *mention* `format!` while asserting its absence. Every real call site is
+past the `cfg(test)` line. **VERIFIED** — the claim is exactly true, and a grep
+for the word would have had me file a P1 against a file whose comments say the
+right thing.
+
+### `bd_30-agents-2jk.74` — the engine asymmetry · 9 claims · 9 VERIFIED
+
+| Claim | Measured | Verdict |
+|---|---|---|
+| "Suite 228 green" at `a77ef2e` | summed the suites at that commit: **197 + 0 + 23 + 7 + 1 = 228** | VERIFIED |
+| now 242 with the CLI | on master: **211 + 0 + 23 + 7 + 1 = 242**; fmt exit 0, clippy exit 0 | VERIFIED |
+| "a regression test pins that depth" | `a_deeply_nested_expression_does_not_abort_the_process` (`vm/mod.rs:126`) builds `" + 1".repeat(20_000)` and asserts `"20001\n"` with no error | VERIFIED |
+| "the same 64 MiB thread as group B, with a const named to say why the two must match" | `VM_STACK = 64 << 20` (`vm/mod.rs:68`) and `EVAL_STACK = 64 << 20` (`tree/eval.rs:383`) — identical; `VM_STACK`'s doc says "for the same reason group B does" | VERIFIED |
+| "corpus still 131/131 on both engines, 0 divergences" | conform 23 cases green over both engines; differential 7 green in 13.21s | VERIFIED |
+
+**A fourth near-miss:** my first grep for the regression test found only doc
+comments and I nearly recorded "no such test". The literal is `20_000` — a Rust
+numeric separator. Method note for anyone continuing: grep both spellings.
+
+**The reasoning claim, judged rather than measured**, as asked. "The asymmetry
+was invisible to the fuzzer *by construction*" — **sound, and the stated
+mechanism is the weaker half of the argument.** A Rust stack overflow aborts the
+process rather than unwinding, so it is not catchable as a panic and yields no
+`Output`; the fuzzer's equality assertion therefore never runs, and what CI sees
+is a dead test binary rather than a named divergence. Correct. But there is a
+second, stronger reason left unstated: the generator never emits that depth at
+all — `tests/differential.rs` caps `Flavor::Nested` at `expr_depth 9`, so the
+comparison would never be reached even if an abort were observable. Both
+reasons are independently sufficient; the reason gives only the second-order
+one. And `.74`'s own method lesson — that a differential harness should compare
+**liveness** as well as output, and treat "one engine survived, the other did
+not" as its own divergence class — is exactly the right generalisation.
+
+### `.71`, `.61`, `.64` · 8 claims · 8 VERIFIED
+
+`.71`: `128_assign_unbound_is_name_error.tr:16` expects `error: Name at line 2:
+assignment to undefined variable 'y'`, and `error.rs:281` produces that exact
+wording. `.61`: §2 line 84 reads "**Every binary operator is LEFT-associative**,
+and parenthesised grouping…", added in `25486ce` (+31 lines). `.64`:
+`empty_braced_bodies_are_legal` at `parser.rs:948`, corpus `208` present — and
+it disclosed that it was closing on `parser-stmt`'s behalf because the owner is
+itself, which is the right kind of disclosure to volunteer.
+
+### The withdrawn root causes — `.65`, `.49`, `.67` → `.77`
+
+Asked directly: are the corrections on the beads, or merely asserted? **They are
+not on the beads.** All three corrections are real and correct — I verified two
+— but none is where a reader of the bead will look, and two bodies still argue
+the withdrawn cause at length.
+
+- **`.65`** — title says "pact was never at fault"; `comment_count = 0`; the
+  description still asserts pact joins paths into one lock filename and
+  concludes "Past roughly 15 paths that guarantee is simply unavailable", which
+  the corrected title makes false.
+- **`.49`** — title carries the quota diagnosis; `comment_count = 0`; the
+  description still says "output-capture flake … with plenty of space" and
+  "points at the harness's output-capture path rather than at … the filesystem".
+  It *was* the filesystem, via quota.
+- **`.67`** — `comment_count = 1`, and that comment is differential-fuzzer's
+  original, ending "something in the ladder recurses on the lhs". The
+  correction lives only in `.74`'s close reason, on a different, closed bead.
+- **`.66`** — checked and **clean**: title and body agree, no withdrawn cause
+  left standing.
+
+**I settled the `.67` disagreement myself**, since the orchestrator flagged its
+own probes as deleted and non-reproducible — exactly the claim it told me to
+mark UNVERIFIABLE rather than accept. Rather than leave it there, I rebuilt the
+experiment: a three-line example against master, on an 8 MiB thread, printing
+either side of the drop.
+
+```
+n=10000    PARSE_RETURNED ok=true / ABOUT_TO_DROP / DROP_SURVIVED / CLEAN_EXIT
+n=100000   PARSE_RETURNED ok=true / ABOUT_TO_DROP / <fatal runtime error: stack overflow>
+```
+
+`parse()` **succeeds** at 100k terms; the abort is in **`Drop`** of the
+left-nested AST, after parse has returned. So the orchestrator's correction is
+**VERIFIED by independent re-derivation** and the fuzzer's ladder inference is
+**disproved** — and the disproved inference is still the only thing on the bead.
+Probe deleted; the transcript is the record. Its other two sites (parse at ~900
+nested parens; execution over a deep tree) remain **UNVERIFIABLE** — I settled
+the one that was in dispute, not all three.
+
+### The honest headline: did the orchestrator's discipline improve?
+
+**It improved, substantially and measurably — and the improvement is real rather
+than cosmetic.**
+
+| | first pass (`.33`–`.38`) | this pass (`.39`–`.46`, `.60`, `.74`, `.71`, `.61`, `.64`) |
+|---|---|---|
+| Claims audited | 6 | 48 |
+| FALSE | 1 (`.53`) | **0** |
+| Evidence per bead | one reason pasted 6× | each bead's own §6 paragraph, extracted per bead |
+| Implementation notes | none | present per bead, and every greppable one checked out |
+| Numbers | n/a | 228 and 242 both exact; 20000, 64 MiB, 131/131, 13s all exact |
+
+The specific defect `.53` named is gone. The reasons now quote the right
+paragraph for the right bead — I tried to break that mapping on all nine and
+could not. `.40`'s three-paragraph claim and `.46`'s two-plus-§6b claim were
+both structural claims that would have been easy to fudge, and both are true.
+And against the `.56` pattern — every FALSE finding in this run was an
+unmeasured number — the orchestrator's numbers in this pass are exact to the
+digit, including a suite count at a commit that is no longer HEAD.
+
+Two habits still lag the reasons themselves, and neither is a false claim:
+corrections filed where the reader will not find them (`.77`), and fixed-length
+quote extraction that truncates mid-sentence. Both are the same underlying
+thing as `.53` — the information is correct and lands in the wrong place — which
+suggests the residual risk is now about **placement**, not about verification.
+
+**On my own conduct:** I nearly filed four false FALSEs this run (a truncated
+checkout, a `df` alias, doc comments that mention `format!`, and a `20_000`
+numeric separator). All four were caught by looking at the actual lines instead
+of trusting a grep. The fidelity check I adopted after the first one is the
+single most valuable thing in this file.
+
+### Pass 6 addendum — `bd_30-agents-1nn` (lexer's follow-up) · 5 claims · 5 VERIFIED
+
+Audited because lexer volunteered it. Commit `fd8f11e`, trailer
+`Pact-Agent: lexer`, `+62/-40` to `lexer.rs` only. "All four Lex sites now go
+through error.rs constructors and my local `lex_err` helper is deleted" —
+`grep -rn 'lex_err' treadle/src/` returns **nothing**. "The gates ran in the real
+worktree this time: 38 passed, 13 mine" — consistent with the master suite I ran.
+
+And it reported a defect class worth more than the fix: the escape test that
+should have caught the embedded-newline bug asserted only
+`contains("unknown escape")` and **passed either way**. `grep -c 'contains('
+treadle/src/front/lexer.rs` is now **0** — every Lex assertion compares full
+message text. Its own phrasing is the right summary and I am keeping it here:
+*a test that cannot fail is a false green with better manners.* That is the
+`.56` pattern in test form — an assertion that looks measured and is not — and
+it is the one thing in this run that an auditor checking close reasons would
+never have caught, because the close reason was true and the test was the liar.
