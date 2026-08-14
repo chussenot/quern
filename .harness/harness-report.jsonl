@@ -1,0 +1,7 @@
+{"at":"2026-08-14T12:30:33Z","agent":"harness-report","tool":"pact","argv":"pact msg inbox","secs":0.036,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:30:33Z","agent":"harness-report","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:30:43Z","agent":"harness-report","tool":"pact","argv":"pact msg read pact-msg-eac1b152b999c4b3","secs":0.048,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:30:57Z","agent":"harness-report","tool":"bd","argv":"bd update bd_30-agents-2jk.7 --claim","secs":0.364,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:30:57Z","agent":"harness-report","tool":"pact","argv":"pact lease acquire .harness/REPORT.md --note run-6 harness log analysis: writing .harness/REPORT.md","secs":0.033,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:32:40Z","agent":"harness-report","tool":"pact","argv":"pact audit --since 2026-08-14T08:09:06Z","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:33:05Z","agent":"harness-report","tool":"pact","argv":"pact lease ls --all","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}

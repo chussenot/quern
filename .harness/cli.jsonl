@@ -1,0 +1,20 @@
+{"at":"2026-08-14T12:31:13Z","agent":"cli","tool":"pact","argv":"pact msg inbox","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:13Z","agent":"cli","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:20Z","agent":"cli","tool":"bd","argv":"bd update bd_30-agents-2jk.26 --claim","secs":0.369,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:21Z","agent":"cli","tool":"bd","argv":"bd show bd_30-agents-2jk.26","secs":0.377,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:28Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-c5112b2d1ff3ffdf","secs":0.054,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:29Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-c69dcdaa672144f6","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:29Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-8a40081c6ad65767","secs":0.046,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:39Z","agent":"cli","tool":"pact","argv":"pact lease acquire src/cli.rs src/main.rs --note bd .26: real CLI — --engine vm|tree, --both with output::diff, exit codes 0/1/2","secs":0.065,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:39Z","agent":"cli","tool":"pact","argv":"pact watch add src/output.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:39Z","agent":"cli","tool":"pact","argv":"pact watch add src/engine.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:39Z","agent":"cli","tool":"pact","argv":"pact watch add src/error.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:31:39Z","agent":"cli","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:10Z","agent":"cli","tool":"pact","argv":"pact msg inbox","secs":0.036,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:17Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a","secs":0.070,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:17Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-abe1213911766f2b","secs":0.049,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:17Z","agent":"cli","tool":"pact","argv":"pact msg read pact-msg-ec7b6bf66f487311","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:45Z","agent":"cli","tool":"pact","argv":"pact lease release src/cli.rs src/main.rs","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:37:45Z","agent":"cli","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:38:11Z","agent":"cli","tool":"bd","argv":"bd close bd_30-agents-2jk.26 --reason=treadle/src/cli.rs replaced (commit ac7007e on agent/cli, branch+worktree wt6/cli created from master a77ef2e because neither existed). treadle [--engine vm|tree] <file.tr> renders a FINISHED Output via output.to_string() and nothing else (SS6/.33 — no streaming); exit 0 clean, 1 on TreadleError (earlier print lines still on stdout), 2 on CLI misuse with a '","secs":0.631,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:38:11Z","agent":"cli","tool":"bd","argv":"bd show bd_30-agents-2jk.26","secs":0.246,"exit":141,"sigpipe":true,"stderr":""}

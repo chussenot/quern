@@ -2,3 +2,7 @@
 {"at":"2026-08-14T08:48:33Z","agent":"unknown","tool":"pact","argv":"pact lease ls --json","secs":0.020,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:48:33Z","agent":"unknown","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T09:18:14Z","agent":"unknown","tool":"pact","argv":"pact msg send --to compiler-stmt --body-file /home/chussenot/.tmpx/compiler-expr-handoff.txt --subject vm/compiler.rs EXPRESSION half landed (119e0b3): what expr() leaves on the stack, the Code-as-parameter seam, and the locals table","secs":0.022,"exit":1,"sigpipe":false,"stderr":"error: no agent identity: pass --agent <name> or set PACT_AGENT "}
+{"at":"2026-08-14T12:30:36Z","agent":"unknown","tool":"bd","argv":"bd show bd_30-agents-2jk.7","secs":0.348,"exit":141,"sigpipe":true,"stderr":""}
+{"at":"2026-08-14T12:33:09Z","agent":"unknown","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.525,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:33:19Z","agent":"unknown","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.497,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:33:45Z","agent":"unknown","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk --json","secs":0.403,"exit":0,"sigpipe":false,"stderr":""}
