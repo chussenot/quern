@@ -45,6 +45,16 @@ pub enum TreadleError {
 /// **FROZEN, §3.**
 pub type Result<T> = std::result::Result<T, TreadleError>;
 
+/// The recursion limit, §6 (bead `.36`): the one place the literal `1000` lives.
+///
+/// Both engines import this rather than holding their own copy, so neither can
+/// count to a different number and neither can spell the message differently.
+/// The counted quantity is **active invocations**, not stack frames: the
+/// top-level program is depth 0, the check is `depth == MAX_DEPTH` at the *call
+/// site* after arguments, name resolution and arity, so 1000 nested invocations
+/// succeed and the 1001st fails. Builtins do not consume depth.
+pub const MAX_DEPTH: usize = 1000;
+
 impl TreadleError {
     // ---- accessors -------------------------------------------------------
 
@@ -288,12 +298,36 @@ impl TreadleError {
         }
     }
 
-    /// §4: deep recursion must produce a `Value` error **naming the limit**,
-    /// not a stack overflow — the limit is 1000 frames in both engines.
-    pub fn recursion_limit(line: u32, limit: u32) -> TreadleError {
+    /// Deep recursion, §4 and §6 (`.36`): a `Value` error **naming the limit**,
+    /// never a stack overflow — a stack overflow aborts the process, and §4
+    /// makes that a bug rather than an error.
+    ///
+    /// Takes no limit argument on purpose: the number comes from [`MAX_DEPTH`],
+    /// so one engine cannot report a different one. `line` is the line of the
+    /// failing **call** expression.
+    pub fn recursion_limit(line: u32) -> TreadleError {
         TreadleError::Value {
             line,
-            msg: format!("recursion limit of {limit} frames exceeded"),
+            msg: format!("recursion limit of {MAX_DEPTH} frames exceeded"),
+        }
+    }
+
+    // ---- not a language error --------------------------------------------
+
+    /// An invariant **inside an engine** broke — a malformed chunk, a stack
+    /// underflow, a bad slot (§6, `.45`).
+    ///
+    /// This is NOT a language error and is documented as unreachable: no treadle
+    /// program can cause one. If it ever appears in an `Output`, the engine that
+    /// produced it has a bug and the fuzzer's divergence report is **correct**.
+    /// It exists so that neither engine reaches for a `format!` when it finds a
+    /// broken invariant — the VM can hit cases the tree-walker cannot, and
+    /// `internal error:` makes that unmistakable in a divergence dump and
+    /// greppable in CI.
+    pub fn internal(line: u32, what: &str) -> TreadleError {
+        TreadleError::Type {
+            line,
+            msg: format!("internal error: {what}"),
         }
     }
 }
@@ -459,13 +493,36 @@ mod tests {
 
     #[test]
     fn accessors_match_the_constructed_variant() {
-        let e = TreadleError::recursion_limit(42, 1000);
+        let e = TreadleError::recursion_limit(42);
         assert_eq!(e.variant(), "Value");
         assert_eq!(e.line(), 42);
         assert_eq!(e.msg(), "recursion limit of 1000 frames exceeded");
         assert_eq!(
             e.to_string(),
             "error: Value at line 42: recursion limit of 1000 frames exceeded"
+        );
+    }
+
+    /// §6 (`.36`): the literal 1000 lives in exactly one place, and the message
+    /// is built from it — so an engine counting to a different number cannot
+    /// also report a consistent message.
+    #[test]
+    fn recursion_message_is_built_from_max_depth() {
+        assert_eq!(MAX_DEPTH, 1000);
+        assert!(TreadleError::recursion_limit(1)
+            .msg()
+            .contains(&MAX_DEPTH.to_string()));
+    }
+
+    /// §6 (`.45`): a broken engine invariant is a `Type` error reading
+    /// `internal error: <what>`, and no treadle program can produce one.
+    #[test]
+    fn internal_is_a_type_error_and_greppable() {
+        let e = TreadleError::internal(4, "stack underflow");
+        assert_eq!(e.variant(), "Type");
+        assert_eq!(
+            e.to_string(),
+            "error: Type at line 4: internal error: stack underflow"
         );
     }
 
