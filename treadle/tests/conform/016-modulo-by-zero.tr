@@ -1,0 +1,6 @@
+# 016 - modulo by zero has a DIFFERENT message from divide by zero (bead .39),
+# which is the whole reason a case can tell the two apart.
+--- source
+print 1 % 0;
+--- expect
+error: Value at line 1: modulo by zero

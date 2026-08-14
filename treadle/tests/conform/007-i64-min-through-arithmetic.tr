@@ -1,0 +1,14 @@
+# 007 - i64::MIN is reachable ONLY through arithmetic (§6/.41): there are no
+# signed literals, so -9223372036854775808 cannot be written as source text
+# (see 008). Once obtained it behaves like any other Int.
+--- source
+let min = -9223372036854775807 - 1;
+print min;
+print min + 1;
+print min / 2;
+print min % 2;
+--- expect
+-9223372036854775808
+-9223372036854775807
+-4611686018427387904
+0

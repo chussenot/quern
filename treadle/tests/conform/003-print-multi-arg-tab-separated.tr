@@ -1,0 +1,9 @@
+# 003 - several comma-separated print arguments become ONE tab-separated line
+# (§2). A single U+0009 between adjacent values, no trailing tab, one line per
+# `print` statement however many arguments it has.
+--- source
+print "a", 1, true, nil;
+print 1, 2;
+--- expect
+a	1	true	nil
+1	2

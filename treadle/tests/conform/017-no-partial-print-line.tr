@@ -1,0 +1,9 @@
+# 017 - NO PARTIAL PRINT LINE (§6/.33). A `print` appends exactly ONE element to
+# Output.lines, and only once EVERY argument has evaluated successfully. So "a"
+# is never emitted here - not as a line, and not as a partial line either.
+--- source
+print "start";
+print "a", 1 / 0;
+--- expect
+start
+error: Value at line 2: divide by zero

@@ -1,0 +1,8 @@
+# 013 - i64::MIN / -1 is `integer overflow`, NOT `divide by zero` (§6/.41 C).
+# Rust's bare / PANICS on this pair, so both engines must use checked_div and
+# an engine that only guards a zero divisor crashes here.
+--- source
+let min = -9223372036854775807 - 1;
+print min / -1;
+--- expect
+error: Value at line 2: integer overflow

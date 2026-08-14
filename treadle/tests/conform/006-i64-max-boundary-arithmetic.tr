@@ -1,0 +1,11 @@
+# 006 - arithmetic AT the i64 upper boundary that does NOT overflow.
+# 9223372036854775807 is i64::MAX and is a legal literal (§6/.41: ASCII digits
+# converted with i64::from_str), so the boundary is reachable from source.
+--- source
+print 9223372036854775807 - 1;
+print 9223372036854775806 + 1;
+print 4611686018427387903 * 2 + 1;
+--- expect
+9223372036854775806
+9223372036854775807
+9223372036854775807

@@ -1,0 +1,8 @@
+# 032 - there is no truthiness (§6/.40), so ! is Bool-only and !1 is a Type
+# error rather than false. Both engines route it through the one Bool gate,
+# Value::as_bool, whose landed message is `expected Bool, got <T>` - which is
+# why this message names no operator.
+--- source
+print !1;
+--- expect
+error: Type at line 1: expected Bool, got Int

@@ -1,0 +1,19 @@
+# 001 - every Value type (§3) through `print`, in its one display form:
+# nil, the decimal digits, true/false, and a Str printed UNQUOTED.
+# `-42` is unary minus applied to the literal 42: §6/.41 has no signed literals.
+--- source
+print nil;
+print 0;
+print -42;
+print 9223372036854775807;
+print true;
+print false;
+print "unquoted";
+--- expect
+nil
+0
+-42
+9223372036854775807
+true
+false
+unquoted

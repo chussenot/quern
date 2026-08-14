@@ -1,0 +1,8 @@
+# 014 - i64::MIN % -1 is `integer overflow` too (§6/.41 C), even though the
+# mathematical answer is 0: checked_rem returns None. The zero divisor is
+# checked FIRST, which is what keeps this distinguishable from 016.
+--- source
+let min = -9223372036854775807 - 1;
+print min % -1;
+--- expect
+error: Value at line 2: integer overflow

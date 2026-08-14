@@ -1,0 +1,10 @@
+# 022 - len of a non-Str is a Type error. error.rs ships no builtin-specific
+# constructor, and §4 forbids a format! at the call site, so the only legal
+# wording available is unary_type_mismatch(line, "len", "Str", got) - the same
+# constructor unary - uses (033). Bead .39 proposed "len expects Str, found Int"
+# instead, which no constructor produces; see the spec-gap bead filed with this
+# corpus.
+--- source
+print len(5);
+--- expect
+error: Type at line 1: len expects a Str operand, got Int

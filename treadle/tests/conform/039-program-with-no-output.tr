@@ -1,0 +1,7 @@
+# 039 - a program that prints nothing and does not fail renders as the EMPTY
+# string (§5: terminated, not separated, so lines == [] is ""). The expect
+# section below is therefore zero bytes, and the file ends at the delimiter.
+--- source
+let x = 1;
+x = x + 1;
+--- expect

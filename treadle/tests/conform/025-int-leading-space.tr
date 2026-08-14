@@ -1,0 +1,8 @@
+# 025 - surrounding whitespace is NOT accepted: i64::from_str rejects " 1"
+# (§6/.41 D), so this is a Value error and not 1. No trimming anywhere - and
+# because bad_int interpolates the string as-is, the expected line below has TWO
+# spaces after the colon. Only a byte comparison (§5) can assert that.
+--- source
+print int(" 1");
+--- expect
+error: Value at line 1: not a valid integer:  1

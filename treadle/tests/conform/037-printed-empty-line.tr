@@ -1,0 +1,9 @@
+# 037 - a printed EMPTY line. `print "";` makes lines == [""], which renders as
+# a bare newline, because §5 terminates every line rather than separating them.
+# A line-splitting comparison cannot tell this from no output at all (bead .34).
+--- source
+print "";
+print "after";
+--- expect
+
+after

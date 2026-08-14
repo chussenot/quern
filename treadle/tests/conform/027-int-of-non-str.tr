@@ -1,0 +1,7 @@
+# 027 - int of a non-Str is a TYPE error, not the identity on Int (§6/.41 D).
+# Same reasoning as 022: unary_type_mismatch is the only §4-legal constructor
+# error.rs offers for a one-operand type complaint.
+--- source
+print int(5);
+--- expect
+error: Type at line 1: int expects a Str operand, got Int

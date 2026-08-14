@@ -1,0 +1,7 @@
+# 024 - int() of a non-numeric string is a Value error (§2, §4). Text from
+# TreadleError::bad_int in the frozen error.rs, which interpolates the offending
+# string unquoted.
+--- source
+print int("abc");
+--- expect
+error: Value at line 1: not a valid integer: abc

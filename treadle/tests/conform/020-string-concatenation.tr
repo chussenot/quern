@@ -1,0 +1,15 @@
+# 020 - + on two Str values concatenates (§2 row 5), including with the empty
+# string, and the result is an ordinary Str you can reassign. Precedence: + (5)
+# binds tighter than == (3), so the last line compares "ab" with "ab".
+--- source
+print "ab" + "cd";
+print "" + "x";
+let s = "a";
+s = s + "b" + "c";
+print s;
+print "a" + "b" == "ab";
+--- expect
+abcd
+x
+abc
+true

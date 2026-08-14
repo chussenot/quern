@@ -1,0 +1,7 @@
+# 012 - overflow on UNARY - (§6/.41 B): -i64::MIN is a Value overflow error
+# with the same message as binary overflow. checked_neg, not a panic.
+--- source
+let min = -9223372036854775807 - 1;
+print -min;
+--- expect
+error: Value at line 2: integer overflow

@@ -1,0 +1,20 @@
+# 023 - int(s) is EXACTLY s.parse::<i64>() (§6/.41 D), and that one sentence
+# settles the family: a leading + is accepted, leading zeros are accepted, and
+# the whole i64 range parses. int("-9223372036854775808") is the only way to
+# write i64::MIN without arithmetic (compare 007).
+--- source
+print int("42");
+print int("-5");
+print int("+1");
+print int("007");
+print int("0");
+print int("9223372036854775807");
+print int("-9223372036854775808");
+--- expect
+42
+-5
+1
+7
+0
+9223372036854775807
+-9223372036854775808

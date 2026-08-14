@@ -1,0 +1,7 @@
+# 019 - the two operands of a binary operator evaluate left to right (§6/.33):
+# lhs completely, side effects included, before rhs is touched. % and / bind
+# tighter than + (§2), so this is (1 % 0) + (1 / 0) and the modulo error wins.
+--- source
+print 1 % 0 + 1 / 0;
+--- expect
+error: Value at line 1: modulo by zero

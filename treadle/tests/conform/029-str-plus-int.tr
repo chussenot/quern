@@ -1,0 +1,7 @@
+# 029 - + is Int+Int or Str+Str; a mixed pair is a Type error (§2). There is no
+# "add a number to a string" coercion in either direction, so the operand types
+# appear in the message in source order.
+--- source
+print "a" + 1;
+--- expect
+error: Type at line 1: + expects Int or Str operands, got Str and Int
