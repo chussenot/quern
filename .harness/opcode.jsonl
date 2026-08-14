@@ -12,3 +12,8 @@
 {"at":"2026-08-14T08:43:29Z","agent":"opcode","tool":"pact","argv":"pact watch add treadle/src/error.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:43:29Z","agent":"opcode","tool":"pact","argv":"pact watch add treadle/src/output.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:43:29Z","agent":"opcode","tool":"pact","argv":"pact watch add treadle/src/front/ast.rs","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:49:54Z","agent":"opcode","tool":"pact","argv":"pact msg inbox","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:49:54Z","agent":"opcode","tool":"pact","argv":"pact agents","secs":0.034,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:50:02Z","agent":"opcode","tool":"pact","argv":"pact msg inbox --watch-only","secs":0.048,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:50:08Z","agent":"opcode","tool":"pact","argv":"pact msg read pact-msg-5b43675af47c1339","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:50:32Z","agent":"opcode","tool":"pact","argv":"pact msg read pact-msg-5b43675af47c1339","secs":0.032,"exit":0,"sigpipe":false,"stderr":""}

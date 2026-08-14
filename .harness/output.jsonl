@@ -16,3 +16,4 @@
 {"at":"2026-08-14T08:47:40Z","agent":"output","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:47:58Z","agent":"output","tool":"pact","argv":"pact lease release --all","secs":0.145,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:47:58Z","agent":"output","tool":"bd","argv":"bd close bd_30-agents-2jk.3 --reason=Landed treadle/src/output.rs and treadle/src/engine.rs (branch agent/output, commit 1341409). FROZEN §3 shapes verbatim: Output{lines:Vec<String>, error:Option<TreadleError>} and trait Engine{name()->&'static str, run(&mut self,&str)->Output}. Display for Output is the canonical rendering: each print line newline-TERMINATED (writeln! per line), then the error'","secs":0.592,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:48:06Z","agent":"output","tool":"bd","argv":"bd show bd_30-agents-2jk.3","secs":0.218,"exit":141,"sigpipe":true,"stderr":""}
