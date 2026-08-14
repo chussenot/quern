@@ -555,7 +555,17 @@ impl Stmts {
         let mut params = Vec::new();
         if !self.c.eat(&TokenKind::RParen) {
             loop {
-                params.push(self.c.ident()?.0);
+                let (param, param_line) = self.c.ident()?;
+                // §6d (bead `.69`): the same parameter twice is refused here, in
+                // the shared front end, so neither engine needs an opinion. They
+                // bind parameters by different mechanisms — scope map by name
+                // versus slot by index — and both happen to let the last
+                // argument win, which is agreement by coincidence rather than by
+                // contract, i.e. a latent divergence.
+                if params.iter().any(|p| p == &param) {
+                    return Err(TreadleError::duplicate_param(param_line, &param));
+                }
+                params.push(param);
                 if !self.c.eat(&TokenKind::Comma) {
                     break;
                 }
@@ -1036,6 +1046,25 @@ mod tests {
         // a whole program may also be empty
         let p = prog("");
         assert!(p.stmts.is_empty() && p.fns.is_empty());
+    }
+
+    /// §6d (bead `.69`). Refused in the shared front end, so the question never
+    /// reaches either engine. Before this, both bound the LAST argument and
+    /// agreed byte-for-byte — by coincidence of a scope map and a slot table,
+    /// not by contract.
+    #[test]
+    fn a_duplicate_parameter_name_is_a_parse_error() {
+        let e = parse("fn f(a, a) { print a; }").expect_err("must be refused");
+        assert!(
+            matches!(&e, TreadleError::Parse { line: 1, msg } if msg == "duplicate parameter 'a'"),
+            "got {e:?}"
+        );
+        // Three params, the repeat not adjacent, reported at the repeat's line.
+        let e = parse("fn g(a,\n b,\n a) { return a; }").expect_err("must be refused");
+        assert_eq!(e.line(), 3, "reported where the repeat is");
+        // Distinct names are of course fine, and a param may shadow a global.
+        assert!(parse("fn h(a, b, c) { return a; }").is_ok());
+        assert!(parse("let a = 1;\nfn k(a) { return a; }").is_ok());
     }
 
     #[test]

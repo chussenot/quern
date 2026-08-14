@@ -177,6 +177,21 @@ impl TreadleError {
         }
     }
 
+    /// §6d (bead `.69`): a parameter list that names the same parameter twice.
+    ///
+    /// A `Parse` error because the two engines bind parameters by different
+    /// mechanisms — the tree-walker by name into a scope map, the VM by slot
+    /// index — and they currently agree that the *last* argument wins only by
+    /// coincidence of those mechanisms, not by contract. An agreement that holds
+    /// by accident is a latent divergence, so the front end refuses the program
+    /// and neither engine has to have an opinion.
+    pub fn duplicate_param(line: u32, name: &str) -> TreadleError {
+        TreadleError::Parse {
+            line,
+            msg: format!("duplicate parameter '{name}'"),
+        }
+    }
+
     /// §6c: an expression nested past [`MAX_NEST`](crate::front::parser::MAX_NEST)
     /// levels of parentheses or call arguments.
     ///

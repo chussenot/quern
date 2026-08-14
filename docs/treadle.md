@@ -325,6 +325,23 @@ a second convention to keep in step for no gain.
 why `eval-expr` filed this rather than reading `src/vm/` to see what group A did,
 which is exactly the behaviour the isolation rule is for.
 
+## 6d. A duplicate parameter name is a Parse error (bead `.69`)
+
+`fn f(a, a) { print a; }` is refused by the front end.
+
+Not because either engine gets it wrong — as of this writing both bind the
+**last** argument, and `print f(1, 2)` prints `2` on each, byte-identical. That
+is exactly the problem. The tree-walker binds parameters by name into a scope
+map and the VM binds them by slot index; the two agree here by coincidence of
+those mechanisms, not because anything requires them to. An agreement that holds
+by accident is a latent divergence, and the differential fuzzer would only find
+it once one engine's binding changed for an unrelated reason.
+
+So the shared front end refuses the program and neither engine has to have an
+opinion. This is the same reasoning as §6c enforcing the depth limits in one
+place: where two independent implementations could drift, prefer to make the
+question unaskable.
+
 ## 6c. Program limits: nothing may abort the process (bead `.67`)
 
 §4 says a panic on any input is a bug. A stack overflow is worse than a panic —
