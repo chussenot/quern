@@ -25,25 +25,19 @@
 //!
 //! Nothing here panics: an unexpected character, an unterminated string and an
 //! integer literal too large for i64 are all `TreadleError::Lex` with a line.
+//!
+//! **No message text is written here.** Every error comes from an `error.rs`
+//! constructor — `unterminated_string`, `unknown_escape`, `unexpected_char`,
+//! `int_literal_out_of_range` — because §4 makes the wording itself a contract
+//! and §5 compares an error as one line of a `.tr` file. The two that matter:
+//! `unknown_escape` escapes the offending char, so a backslash before a line
+//! break cannot embed a real newline in the message; and an overflowing literal
+//! is `int_literal_out_of_range` (a `Lex` error), NOT `bad_int`, which is the
+//! runtime `int()` builtin failing and a `Value` error. Same-looking text under
+//! two variants would leave a corpus author unable to tell which stage failed.
 
 use crate::error::{Result, TreadleError};
 use crate::front::token::{keyword, Token, TokenKind};
-
-/// The lexer's only error shape.
-///
-/// The four wordings below are **agent `error`'s**, taken verbatim from its
-/// announced constructors so that the swap is mechanical and changes no text:
-/// `unterminated_string(line)`, `unknown_escape(line, ch)`,
-/// `unexpected_char(line, ch)` and `bad_int(line, text)`. They are struct
-/// literals only because `error.rs` (bead .2, a frozen §3 file with a single
-/// author) had not landed on master yet — §4 makes the wording the contract, so
-/// matching the strings now is what keeps the two from forking.
-fn lex_err(line: u32, msg: impl Into<String>) -> TreadleError {
-    TreadleError::Lex {
-        line,
-        msg: msg.into(),
-    }
-}
 
 /// Source text to tokens, ending with exactly one [`TokenKind::Eof`].
 pub fn tokenize(src: &str) -> Result<Vec<Token>> {
@@ -102,7 +96,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
                         // Names the line the literal opened on, not the end of
                         // the file — that is the line the reader must fix.
                         None => {
-                            return Err(lex_err(tok_line, "unterminated string"));
+                            return Err(TreadleError::unterminated_string(tok_line));
                         }
                         Some('"') => break,
                         Some('\\') => match chars.next() {
@@ -113,10 +107,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
                             // The line the backslash is on, which for a
                             // multi-line literal is not the line it started on.
                             Some(bad) => {
-                                return Err(lex_err(line, format!("unknown escape \\{bad}")));
+                                return Err(TreadleError::unknown_escape(line, bad));
                             }
                             None => {
-                                return Err(lex_err(tok_line, "unterminated string"));
+                                return Err(TreadleError::unterminated_string(tok_line));
                             }
                         },
                         Some('\n') => {
@@ -134,14 +128,15 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
                 while let Some(d) = chars.next_if(char::is_ascii_digit) {
                     digits.push(d);
                 }
-                // No sign here: `-7` is prefix minus applied to 7, so the
-                // largest literal is i64::MAX and i64::MIN is reachable only as
-                // `-9223372036854775808`, which the parser folds. A literal past
-                // the range is an error, never a wrap and never a panic.
+                // ASCII digits through `i64::from_str`, and out of range is a
+                // Lex error — §6/.41, which also settles what the parser does
+                // with it: i64::MIN is reachable ONLY through arithmetic, so
+                // `-9223372036854775808` stays a Lex error and the parser must
+                // NOT fold Minus+Int to rescue it. Never a wrap, never a panic.
                 match digits.parse::<i64>() {
                     Ok(n) => TokenKind::Int(n),
                     Err(_) => {
-                        return Err(lex_err(tok_line, format!("not a valid integer: {digits}")));
+                        return Err(TreadleError::int_literal_out_of_range(tok_line, &digits));
                     }
                 }
             }
@@ -157,7 +152,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>> {
             }
 
             other => {
-                return Err(lex_err(tok_line, format!("unexpected character '{other}'")));
+                return Err(TreadleError::unexpected_char(tok_line, other));
             }
         };
 
@@ -428,15 +423,32 @@ mod tests {
     /// An unknown escape is an error, not a silent passthrough.
     #[test]
     fn an_unknown_escape_is_a_lex_error() {
-        for src in [r#""\q""#, r#""\r""#, r#""\0""#, r#""\x41""#, r#""a\zb""#] {
-            let (line, msg) = lex_error(src);
-            assert_eq!(line, 1, "{src}");
-            assert!(msg.contains("unknown escape"), "{src}: {msg}");
+        // The FULL message, not a substring: a `contains` here passed whether or
+        // not the char was escaped, which is exactly how the raw-newline bug below
+        // survived its own test.
+        for (src, want) in [
+            (r#""\q""#, r"unknown escape \q"),
+            (r#""\r""#, r"unknown escape \r"),
+            (r#""\0""#, r"unknown escape \0"),
+            (r#""\x41""#, r"unknown escape \x"),
+            (r#""a\zb""#, r"unknown escape \z"),
+        ] {
+            assert_eq!(lex_error(src), (1, want.to_string()), "{src}");
         }
         // it names the line the backslash is on, not the literal's first line
-        assert_eq!(lex_error("\"a\n\\q\"").0, 2);
+        assert_eq!(
+            lex_error("\"a\n\\q\""),
+            (2, r"unknown escape \q".to_string())
+        );
+        // A backslash before a real line break: the constructor escapes the char,
+        // so the message stays ONE line. §5 compares an error as a single line of
+        // a .tr file, so a message with an embedded newline has no expressible
+        // expectation at all. The line is 1 because that is where the backslash is.
+        let (line, msg) = lex_error("\"a\\\n\"");
+        assert_eq!((line, msg.as_str()), (1, r"unknown escape \n"));
+        assert!(!msg.contains('\n'), "must stay one line: {msg:?}");
         // a backslash at end of input is an unterminated string, not an escape
-        assert!(lex_error("\"a\\").1.contains("unterminated"));
+        assert_eq!(lex_error("\"a\\").1, "unterminated string");
     }
 
     /// An unterminated literal names the line it started on.
@@ -444,7 +456,7 @@ mod tests {
     fn an_unterminated_string_names_the_line_it_started_on() {
         let (line, msg) = lex_error("let s = \"abc;\nprint 1;");
         assert_eq!(line, 1);
-        assert!(msg.contains("unterminated"), "{msg}");
+        assert_eq!(msg, "unterminated string");
         // started on 2, ran to end of file three lines later: still 2
         assert_eq!(lex_error("print 1;\nlet s = \"ab\ncd\nef").0, 2);
         assert_eq!(lex_error("\"").0, 1);
@@ -486,7 +498,10 @@ mod tests {
             vec![Ident("a".into()), Slash, Ident("c".into()), Eof]
         );
         // `and`/`or` are words, so the C spellings are not operators here
-        assert!(lex_error("a && b").1.contains("unexpected character"));
+        assert_eq!(
+            lex_error("a && b"),
+            (1, "unexpected character '&'".to_string())
+        );
     }
 
     #[test]
@@ -494,15 +509,19 @@ mod tests {
         assert_eq!(kinds("9223372036854775807"), vec![Int(i64::MAX), Eof]);
         let (line, msg) = lex_error("9223372036854775808"); // i64::MAX + 1
         assert_eq!(line, 1);
-        assert!(msg.contains("not a valid integer"), "{msg}");
+        // `bad_int` is the runtime int() builtin and a Value error; an
+        // overflowing literal is a Lex error with its own wording, so a corpus
+        // author can tell which stage failed.
+        assert_eq!(msg, "integer literal out of range: 9223372036854775808");
         // absurdly long, and on a later line, still an error with the right line
         assert_eq!(
             lex_error(&format!("let x = 1;\nlet y = {};", "9".repeat(400))).0,
             2
         );
-        // `-9223372036854775808` lexes as prefix minus applied to a literal that
-        // is itself out of range; the parser folds the pair, so this is the one
-        // place the boundary is visible.
+        // `-9223372036854775808` is prefix minus applied to a literal that is
+        // itself out of range, so it is a Lex error and stays one: §6/.41 makes
+        // i64::MIN reachable only through arithmetic, so no Minus+Int folding in
+        // the parser is coming to rescue it.
         assert!(tokenize("-9223372036854775808").is_err());
         assert_eq!(
             kinds("-9223372036854775807"),
@@ -513,10 +532,13 @@ mod tests {
 
     #[test]
     fn an_unexpected_character_is_a_lex_error_with_its_line() {
-        for (src, want_line) in [("@", 1), ("let x = 1;\n#", 2), ("a\nb\n$\n", 3)] {
+        for (src, want) in [
+            ("@", (1, "unexpected character '@'")),
+            ("let x = 1;\n#", (2, "unexpected character '#'")),
+            ("a\nb\n$\n", (3, "unexpected character '$'")),
+        ] {
             let (line, msg) = lex_error(src);
-            assert_eq!(line, want_line, "{src}");
-            assert!(msg.contains("unexpected character"), "{src}: {msg}");
+            assert_eq!((line, msg.as_str()), want, "{src}");
         }
         // non-ASCII outside a string is unexpected, and does not panic on the
         // multi-byte boundary
