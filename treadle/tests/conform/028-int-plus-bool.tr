@@ -1,0 +1,7 @@
+# 028 - no implicit conversion anywhere (§2), so Int + Bool is a Type error.
+# The wording is the landed treadle/src/value.rs (FROZEN, §3) binary_type_error,
+# which §6/.39 makes the owner of every operator message.
+--- source
+print 1 + true;
+--- expect
+error: Type at line 1: + expects Int or Str operands, got Int and Bool

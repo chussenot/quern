@@ -1,0 +1,7 @@
+# 018 - print arguments evaluate LEFT TO RIGHT (§6/.33). Both arguments fail, so
+# the error that escapes names the order: `modulo by zero` means the first
+# argument was evaluated first.
+--- source
+print 1 % 0, 1 / 0;
+--- expect
+error: Value at line 1: modulo by zero

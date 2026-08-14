@@ -1,0 +1,7 @@
+# 031 - Nil is not ordered, not even against itself (§6/.40): `nil < nil` is a
+# Type error, while `nil == nil` is true (035). Same-type is necessary for
+# ordering but not sufficient.
+--- source
+print nil < nil;
+--- expect
+error: Type at line 1: < expects two Int or two Str operands, got Nil and Nil

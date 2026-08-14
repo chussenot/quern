@@ -1,0 +1,5 @@
+# 011 - integer overflow on * (§4).
+--- source
+print 9223372036854775807 * 2;
+--- expect
+error: Value at line 1: integer overflow

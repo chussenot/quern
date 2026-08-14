@@ -1,0 +1,17 @@
+# 021 - len(Str) counts BYTES, not characters (§2). U+00E9 is 2 UTF-8 bytes, the
+# two CJK characters are 3 each, and the emoji is 4 - so a char-counting
+# implementation answers 1, 5, 2 and 1 on the last four lines.
+--- source
+print len("");
+print len("abc");
+print len("é");
+print len("héllo");
+print len("日本");
+print len("🎉");
+--- expect
+0
+3
+2
+6
+6
+4

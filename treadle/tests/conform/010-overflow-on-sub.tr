@@ -1,0 +1,6 @@
+# 010 - integer overflow on binary - (§4): i64::MIN - 1.
+--- source
+let min = -9223372036854775807 - 1;
+print min - 1;
+--- expect
+error: Value at line 2: integer overflow

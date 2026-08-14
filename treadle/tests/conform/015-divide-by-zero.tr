@@ -1,0 +1,9 @@
+# 015 - divide by zero is a Value error (§2, §4), and the output produced before
+# it survives (§3: an engine that buffers output and drops it on error diverges
+# here immediately).
+--- source
+print 1;
+print 1 / 0;
+--- expect
+1
+error: Value at line 2: divide by zero

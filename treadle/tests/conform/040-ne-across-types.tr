@@ -1,0 +1,9 @@
+# 040 - `!=` across two different types is the same Type error as `==`
+# (§6/.40). The landed value.rs exposes a single entry point (eq_value), so a
+# correct engine must negate it and the message names `==` even for `!=`. Bead
+# .39 proposes eq_op(ne: bool) instead, which would change these bytes; see the
+# spec-gap bead filed with this corpus.
+--- source
+print 1 != "1";
+--- expect
+error: Type at line 1: == expects two values of the same type, got Int and Str

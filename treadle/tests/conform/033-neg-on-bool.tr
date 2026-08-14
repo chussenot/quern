@@ -1,0 +1,8 @@
+# 033 - unary - is Int-only (§2 row 7). The article in the landed value.rs
+# message does not agree with the noun ("a Int"); it is asserted VERBATIM,
+# because §4 makes the bytes the contract and both engines get them from the
+# same constructor.
+--- source
+print -true;
+--- expect
+error: Type at line 1: - expects a Int operand, got Bool

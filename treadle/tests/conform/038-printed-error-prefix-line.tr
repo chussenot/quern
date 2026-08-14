@@ -1,0 +1,9 @@
+# 038 - a printed line that BEGINS with `error: ` is still just output. §5's
+# byte comparison never CLASSIFIES a line, so this is representable and needs no
+# escaping rule (bead .34, case 5).
+--- source
+print "error: not really";
+print 1;
+--- expect
+error: not really
+1

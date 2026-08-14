@@ -1,0 +1,9 @@
+# 026 - a numeric string outside i64 gives the SAME Value error as a
+# non-numeric one (§6/.41 D): bad_int covers the whole failure family.
+# Pair this with 008: identical message text, different VARIANT and stage - a
+# literal too big never runs (Lex), int() of the same digits fails mid-run
+# (Value), which is the distinction error.rs's doc comment insists on.
+--- source
+print int("9223372036854775808");
+--- expect
+error: Value at line 1: not a valid integer: 9223372036854775808

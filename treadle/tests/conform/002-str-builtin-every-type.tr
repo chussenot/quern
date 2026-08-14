@@ -1,0 +1,21 @@
+# 002 - str(any) -> Str is exactly the §3 display form, for every Value type.
+# The last two lines prove the result really is a Str: it concatenates with +,
+# and len() measures it.
+--- source
+print str(nil);
+print str(42);
+print str(-42);
+print str(true);
+print str(false);
+print str("abc");
+print str(nil) + "!";
+print len(str(12345));
+--- expect
+nil
+42
+-42
+true
+false
+abc
+nil!
+5

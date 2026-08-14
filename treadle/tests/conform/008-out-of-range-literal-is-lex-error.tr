@@ -1,0 +1,14 @@
+# 008 - an integer literal out of i64 range is a LEX error (§6/.41 A), so it
+# stops the program before anything RUNS: the `print 1;` on line 1 produces no
+# output at all. Contrast 009, where a runtime error keeps the earlier lines,
+# and 026, which is the SAME message text under a different variant.
+# Text from TreadleError::int_literal_out_of_range in the frozen error.rs, which
+# §4 makes the only legal source. NOTE: the landed lexer.rs still formats this
+# by hand as "not a valid integer: ..." - error.rs's own doc comment calls that
+# the runtime int() wording and warns against the conflation. This case asserts
+# the constructor, i.e. the §4-legal side of that conflict.
+--- source
+print 1;
+print -9223372036854775808;
+--- expect
+error: Lex at line 2: integer literal out of range: 9223372036854775808

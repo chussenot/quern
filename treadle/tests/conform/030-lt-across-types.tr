@@ -1,0 +1,7 @@
+# 030 - < > <= >= take two Int or two Str; every other pairing is a Type error
+# (§6/.40), not false. The operator in the message is its SOURCE spelling, not
+# the BinOp variant name.
+--- source
+print 1 < "a";
+--- expect
+error: Type at line 1: < expects two Int or two Str operands, got Int and Str

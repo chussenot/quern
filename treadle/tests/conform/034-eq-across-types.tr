@@ -1,0 +1,5 @@
+# 034 - == across two different types is a Type error, not false (§6/.40).
+--- source
+print 1 == "1";
+--- expect
+error: Type at line 1: == expects two values of the same type, got Int and Str

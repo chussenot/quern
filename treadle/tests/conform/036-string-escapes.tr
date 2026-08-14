@@ -1,0 +1,15 @@
+# 036 - the four escapes of §2 and what they do to the OBSERVABLE. `print
+# "a\nb";` appends ONE element to Output.lines whose bytes contain a newline
+# (§3: a Str displays as its bytes), which is exactly why §5 compares bytes and
+# never splits lines: split-and-compare fails a CORRECT engine here.
+--- source
+print "a\nb";
+print "x\ty";
+print "q\\z";
+print "he said \"hi\"";
+--- expect
+a
+b
+x	y
+q\z
+he said "hi"
