@@ -1,0 +1,11 @@
+# 321: §4 — integer overflow on `+` is a `Value` error, never a wrap and never a
+# panic, and it happens at run time so line 2's output is kept. i64::MAX is a
+# legal literal (§6 `.41`: only an OUT OF RANGE literal is a Lex error), which is
+# what makes the overflow reachable on the next line.
+--- source
+let big = 9223372036854775807;
+print big;
+print big + 1;
+--- expect
+9223372036854775807
+error: Value at line 3: integer overflow

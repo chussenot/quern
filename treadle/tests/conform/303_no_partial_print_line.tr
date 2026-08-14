@@ -1,0 +1,10 @@
+# 303: NO PARTIAL PRINT LINE (§6 `.33`). A `print` appends exactly one element
+# to Output.lines, and only once EVERY argument evaluated successfully. So the
+# "a" of line 2 is never emitted — not as "a", not as "a\t", not as its own
+# line. The line-1 print already completed, so it stays.
+--- source
+print "ok";
+print "a", 1 / 0;
+--- expect
+ok
+error: Value at line 2: divide by zero

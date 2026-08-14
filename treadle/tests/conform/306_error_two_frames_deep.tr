@@ -1,0 +1,21 @@
+# 306: the error is raised two frames deep (top level -> outer -> inner) and its
+# line is line 3, the innermost failing node inside `inner` — not the call site
+# in `outer` (7) and not the top-level call (10). §6 `.46`: an error's line is
+# the line of the innermost AST node that failed. Output from both frames and
+# from the top level is kept.
+--- source
+fn inner(n) {
+  print "in inner";
+  return n % 0;
+}
+fn outer(n) {
+  print "in outer";
+  return inner(n) + 1;
+}
+print "start";
+print outer(7);
+--- expect
+start
+in outer
+in inner
+error: Value at line 3: modulo by zero

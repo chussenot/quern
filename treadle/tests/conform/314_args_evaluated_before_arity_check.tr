@@ -1,0 +1,17 @@
+# 314: §6 `.35` call order — (a) arguments left to right, THEN (b) name, (c)
+# arity. So shout(1) runs and prints "1" BEFORE the arity of `two` is checked,
+# and that output survives the error. An engine that checked arity first would
+# print nothing. The line is 8, the call's own line.
+# Wording is error.rs `wrong_arity`: "<name> expects <n> arguments, got <m>".
+--- source
+fn two(a, b) {
+  return a + b;
+}
+fn shout(v) {
+  print v;
+  return v;
+}
+print two(shout(1));
+--- expect
+1
+error: Type at line 8: two expects 2 arguments, got 1

@@ -1,0 +1,22 @@
+# 305: the error is inside a `while` body and only on the THIRD iteration, so two
+# full iterations of output precede it. The line is the line of the failing
+# expression inside the body (6), never the `while` header's (2).
+# i=1: 10 / -2 == -5.  i=2: 10 / -1 == -10.  i=3: 10 / 0 fails.
+# Deliberately no parentheses and no chained operators anywhere in this file:
+# §2 pins precedence but not associativity, and does not say `( expr )` is a
+# primary (bead .54), so no case here may depend on either.
+--- source
+let i = 0;
+while i < 5 {
+  print i;
+  i = i + 1;
+  let d = i - 3;
+  print 10 / d;
+}
+--- expect
+0
+-5
+1
+-10
+2
+error: Value at line 6: divide by zero

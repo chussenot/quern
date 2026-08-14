@@ -1,0 +1,14 @@
+# 304: the two halves of §6 `.33` together. Arguments evaluate LEFT TO RIGHT, so
+# p(1) runs and its own completed `print` appends "1"; then `2 / 0` fails; then
+# p(3) is never evaluated, so no "3" appears. The failing print itself appends
+# nothing, so a side effect of an earlier argument outlives a print that never
+# produced a line.
+--- source
+fn p(v) {
+  print v;
+  return v;
+}
+print p(1), 2 / 0, p(3);
+--- expect
+1
+error: Value at line 5: divide by zero

@@ -1,0 +1,7 @@
+# 301: the error is on line 1, so there is no prior output at all.
+# Output.lines == [] renders as "" (§5: lines are newline-TERMINATED, not
+# separated), so the whole rendering is the error line and nothing else.
+--- source
+print 1 / 0;
+--- expect
+error: Value at line 1: divide by zero

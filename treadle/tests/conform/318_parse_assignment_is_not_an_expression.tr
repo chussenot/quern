@@ -1,0 +1,11 @@
+# 318: §2 pins `x = (y = 1)` as a PARSE error — `=` is a statement token, not an
+# expression operator, and an engine that accepted it would diverge from one that
+# did not. Wording follows error.rs `unexpected_token`, whose own doc names this
+# exact program: "unexpected <token>", the token spelled by Display for
+# TokenKind and quoted. Nothing runs, so there is no output.
+--- source
+let x = 1;
+let y = 2;
+x = (y = 1);
+--- expect
+error: Parse at line 3: unexpected '='

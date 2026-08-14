@@ -1,0 +1,13 @@
+# 302: the §3 rule in its plainest form — a program that fails at line 3 has the
+# output of lines 1..2 AND the error. An engine that buffers output and drops it
+# on error produces only the error line and diverges here immediately.
+# Line 4 is never reached.
+--- source
+print 1;
+print 2;
+print 3 / 0;
+print 4;
+--- expect
+1
+2
+error: Value at line 3: divide by zero

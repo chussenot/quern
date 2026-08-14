@@ -1,0 +1,15 @@
+# 322: §6 `.40` — there is no truthiness, so a non-Bool condition is a `Type`
+# error at the CONDITION's line (3). The loop runs once with a Bool condition and
+# that iteration's output is kept; the second evaluation of the condition, now an
+# Int, fails. An engine with any coercion would loop instead.
+--- source
+let i = 0;
+let c = true;
+while c {
+  print i;
+  i = i + 1;
+  c = i;
+}
+--- expect
+0
+error: Type at line 3: expected Bool, got Int

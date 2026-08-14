@@ -1,0 +1,18 @@
+# 309: an error inside a multi-line function body, six lines into it. The line is
+# 7 — the failing expression's own line — not 1 (the `fn`), not 8 (the closing
+# brace) and not 9 (the call site). The two prints the body already completed are
+# part of the output.
+--- source
+fn f(a) {
+  let b = a + 1;
+  let c = b * 2;
+  print c;
+  let d = c - 100;
+  print d;
+  return d / 0;
+}
+print f(1);
+--- expect
+4
+-96
+error: Value at line 7: divide by zero
