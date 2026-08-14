@@ -184,9 +184,22 @@ enum Flavor {
     /// Errors mid-output, so the partial-output rule is exercised: prior print
     /// lines are kept, and a `print` with a failing argument emits no line.
     Errors,
-    /// Deeply nested expressions — bounded well below the parser's limit (bead
-    /// `.67`), because an overflow there aborts rather than reports.
+    /// Deeply *balanced* nested expressions from the recursive grammar. Bounded
+    /// by size, not by safety, now that §6c caps nesting in the front end.
     Nested,
+    /// **The shape the recursive grammar cannot make**, and the one that found
+    /// both of the run's real engine bugs.
+    ///
+    /// `Gen::expr_of` builds balanced trees, so its depth is logarithmic in its
+    /// size and it never produces a long left-leaning chain — which is exactly
+    /// what `1 + 1 + 1 + …` is, and exactly what broke `.67` (a 100 000-term
+    /// chain parsed and then aborted in `Drop`) and `.74` (20 000 terms returned
+    /// `20001` on `tree` and aborted on `vm`, invisible to this fuzzer because an
+    /// abort leaves no `Output` to compare). §6c fixed both by capping
+    /// [`MAX_EXPR_DEPTH`] and [`MAX_NEST`] in the shared front end, so this
+    /// flavour now generates right up to and **across** both limits: the two
+    /// engines must agree on the refusal as much as on a result.
+    Deep,
 }
 
 const FLAVORS: &[Flavor] = &[
@@ -198,6 +211,7 @@ const FLAVORS: &[Flavor] = &[
     Flavor::Scope,
     Flavor::Errors,
     Flavor::Nested,
+    Flavor::Deep,
 ];
 
 /// Generator biases. One struct rather than one generator per flavour: the
@@ -224,8 +238,18 @@ struct Knobs {
     expr_depth: u32,
     /// Top-level statement count.
     stmts: u32,
+    /// Maximum number of `print` arguments.
+    print_args: u32,
+    /// Maximum `while` bound, i.e. how many times a loop may actually iterate.
+    loop_bound: u32,
     /// If set, drive the recursion limit from this depth.
     rec_depth: Option<i64>,
+    /// Open the program with one deep shape — a left-nested chain, or a stack of
+    /// parentheses or nested calls. See [`Flavor::Deep`].
+    deep: bool,
+    /// Chance a plain `Int`/`Str` expression is a short chain instead, so the
+    /// left-leaning shape appears in ordinary programs and not only in `Deep`.
+    p_chain: u32,
 }
 
 impl Flavor {
@@ -239,7 +263,11 @@ impl Flavor {
             p_print: 40,
             expr_depth: 3,
             stmts: 7,
+            print_args: 4,
+            loop_bound: 5,
             rec_depth: None,
+            deep: false,
+            p_chain: 6,
         };
         match self {
             Flavor::General => {}
@@ -273,6 +301,9 @@ impl Flavor {
                 k.p_call = 8;
                 k.stmts = 12;
                 k.expr_depth = 2;
+                // Loops that actually iterate, so a write reaching an outer
+                // binding is observed more than once.
+                k.loop_bound = 12;
             }
             Flavor::Errors => {
                 k.errs = 3;
@@ -281,9 +312,18 @@ impl Flavor {
                 k.stmts = 8;
             }
             Flavor::Nested => {
-                // Bounded on purpose: see the module docs on bead `.67`.
-                k.expr_depth = rng.gen_range(6..=9);
+                // Balanced, so depth n is 2^n leaves — bounded by program size
+                // now rather than by the abort §6c removed.
+                k.expr_depth = rng.gen_range(6..=10);
                 k.stmts = 3;
+                k.print_args = 8;
+            }
+            Flavor::Deep => {
+                k.deep = true;
+                k.stmts = 2;
+                k.expr_depth = 2;
+                k.errs = 0;
+                k.p_chain = 25;
             }
         }
         k
@@ -389,6 +429,9 @@ const STRS: &[&str] = &[
     // `chars().count()` would disagree here and nowhere else.
     r#""é""#,
     r#""日本語""#,
+    // Long enough that `+` has to grow the buffer rather than fit in place, and
+    // long enough that `len` of a concatenation is a number nobody typed.
+    r#""0123456789012345678901234567890123456789012345678901234567890123""#,
 ];
 
 /// Every non-logical binary operator over `Int` (§2 rungs 5 and 6). `and`/`or`,
@@ -404,6 +447,21 @@ const BUILTINS: &[&str] = &["len", "str", "int"];
 /// The preamble's recursive drivers, all of which count down to a base case and
 /// therefore terminate — either by returning or by hitting `MAX_DEPTH`.
 const RECURSIVE: &[&str] = &["rec", "dp", "mu", "mv", "ml"];
+
+/// Term counts for a left-nested chain, straddling §6c's
+/// `MAX_EXPR_DEPTH` (10 000). Below it the chain evaluates on both engines;
+/// above it both must produce the identical `Parse` refusal. The small values
+/// are here too, because a one-term chain is the base case the boundary is
+/// measured against.
+const CHAIN_LENS: &[usize] = &[
+    1, 2, 3, 9, 64, 999, 1_000, 4_000, 8_000, 9_998, 9_999, 10_000, 10_001, 10_002, 12_000,
+];
+
+/// Nesting depths, straddling §6c's `MAX_NEST` (100). Not the same quantity as
+/// the chain above: `((((1))))` is nesting 4 at tree depth 1, and `1 + 1 + …` is
+/// nesting 1 at tree depth N, which is why the front end needs two limits and
+/// why this needs two tables.
+const NEST_LENS: &[usize] = &[1, 2, 3, 40, 98, 99, 100, 101, 102, 150, 400];
 
 /// Fixed preamble, in every program. `mn` is `i64::MIN` built by arithmetic
 /// because the literal is a `Lex` error; `se` is the side-effect function the
@@ -421,14 +479,24 @@ const RECURSIVE: &[&str] = &["rec", "dp", "mu", "mv", "ml"];
 /// declared at any scope to global, so every program calls a function whose
 /// declaration was never at top level. The parser is shared, but *resolving* it
 /// is each engine's own code.
+/// `gw` is a global the generated body may **write from inside a function**,
+/// which `mx`/`mn` deliberately may not — those two have to keep their values or
+/// the `i64::MIN` boundary leaves stop testing a boundary. §2 says a function
+/// body's parent scope is the global one, so a write to `gw` from inside `g` must
+/// reach the global and be visible to the statement after the call.
+///
+/// `four` takes four parameters, because two is not enough to tell "the frame is
+/// laid out in argument order" from "the frame happens to be symmetric".
 const PREAMBLE: &str = "\
 let mx = 9223372036854775807;
 let mn = 0 - 9223372036854775807 - 1;
+let gw = 0;
 fn se(t) { print \"se\", t; return t; }
 fn boom(n) { return n / 0; }
 fn rec(n) { if n < 1 { return 0; } return rec(n - 1); }
 fn dp(n) { if n % 200 == 0 { print n; } if n < 1 { return 0; } return dp(n - 1); }
 fn two(p, q) { return p + q; }
+fn four(w, x, y, z) { print w, x, y, z; return w - x + y - z; }
 fn mu(n) { if n < 1 { return 0; } return mv(n - 1); }
 fn mv(n) { if n < 1 { return 1; } return mu(n - 1); }
 fn ml(n) { let u = n * 2; let v = u + 1; if n < 1 { return v; } return ml(n - 1); }
@@ -467,6 +535,7 @@ impl<'r> Gen<'r> {
             scopes: vec![vec![
                 ("mx".to_string(), Ty::Int),
                 ("mn".to_string(), Ty::Int),
+                ("gw".to_string(), Ty::Int),
             ]],
             // Drawn per program, not fixed at `k.errs`: there are dozens of
             // injection opportunities in one program, so a non-zero budget is
@@ -611,6 +680,79 @@ impl<'r> Gen<'r> {
         self.literal_of(ty)
     }
 
+    /// A **left-nested chain** of `n` binary operators — `1 + 1 + 1 + …`, no
+    /// parentheses, so it is `n` levels of AST depth at nesting depth 1.
+    ///
+    /// This is the shape [`Gen::expr_of`] structurally cannot make: a recursive
+    /// generator's trees are balanced, so their depth is logarithmic in their
+    /// size. It is also the shape that produced both real engine findings of the
+    /// run (`.67`, `.74`), which is exactly the argument for generating it.
+    ///
+    /// A newline every so often, so an error deep in a huge tree reports a line
+    /// number that is not 1 — with the front end capping depth at 10 000 there is
+    /// a lot of room between "line 1" and "the line that actually failed".
+    ///
+    /// **All operators come from one precedence rung**, and that is load-bearing
+    /// rather than tidy. A chain that mixes rungs is *not* a left spine: `%` and
+    /// `*` bind tighter than `+`, so `1 + 1 * 1 + 1` hangs small multiplicative
+    /// subtrees off a shorter additive spine, and its AST depth is the number of
+    /// `+`/`-` rather than the number of operators. Measured the hard way — a
+    /// 12 000-operator mixed chain came out ~8 400 deep, sailed under
+    /// `MAX_EXPR_DEPTH`, and `tree_limit` stayed at 0 while the generator looked
+    /// like it was straddling the limit.
+    fn chain(&mut self, ty: Ty, n: usize) -> String {
+        // One rung for the whole chain, so depth == n exactly. Additive for
+        // anything long: `*` overflows within twenty terms of a non-trivial
+        // literal and would end every long chain at the same place.
+        let ops: &[&str] = match ty {
+            Ty::Str => &["+"],
+            _ if n > 40 || self.chance(80) => &["+", "-"],
+            _ => &["*", "/", "%"],
+        };
+        let mut s = self.literal_of(ty);
+        // The one term that is *not* a literal, so the chain has a live operand
+        // whose type can be wrong. `usize::MAX` when there is to be none.
+        let clash = if self.chance(12) {
+            self.rng.gen_range(0..n.max(1))
+        } else {
+            usize::MAX
+        };
+        for i in 0..n {
+            let op = *self.pick(ops);
+            let rhs = if i == clash {
+                let t = self.other_ty(ty);
+                self.literal_of(t)
+            } else if ty == Ty::Str {
+                self.literal_of(Ty::Str)
+            } else {
+                // Never zero: `/ 0` and `% 0` would end the chain at term one.
+                (*self.pick(&["1", "2", "3"])).to_string()
+            };
+            s.push(if i % 40 == 39 { '\n' } else { ' ' });
+            s.push_str(op);
+            s.push(' ');
+            s.push_str(&rhs);
+        }
+        s
+    }
+
+    /// `n` levels of parentheses or nested calls around one leaf — nesting depth
+    /// `n` at tree depth 1 (parens build no AST node) or `n` (calls do). §6c caps
+    /// this at `MAX_NEST` = 100, and [`NEST_LENS`] straddles it.
+    fn nest(&mut self, n: usize) -> String {
+        if self.chance(55) {
+            let leaf = self.literal_of(Ty::Int);
+            format!("{}{leaf}{}", "(".repeat(n), ")".repeat(n))
+        } else {
+            // Nested calls also nest the parser, and each level that *runs*
+            // prints, so a nesting refusal and a 99-level success are told apart
+            // by their output and not just by their error.
+            let f = self.identity_fn();
+            let leaf = self.literal_of(Ty::Int);
+            format!("{}{leaf}{}", format!("{f}(").repeat(n), ")".repeat(n))
+        }
+    }
+
     /// The argument of `rec`/`dp`: usually a plain count so the recursion is
     /// actually driven, occasionally an expression so its type errors are too.
     fn depth_arg(&mut self, d: u32) -> String {
@@ -679,10 +821,20 @@ impl<'r> Gen<'r> {
                     let n = self.depth_arg(d1);
                     format!("dp({n})")
                 }
-                5..=6 => {
+                5 => {
                     let a = self.expr_of(Ty::Int, d1);
                     let b = self.expr_of(Ty::Int, d1);
                     format!("two({a}, {b})")
+                }
+                6 => {
+                    // Four arguments, evaluated left to right (§6/`.33`), each of
+                    // which may itself fail — so argument order is observable
+                    // through `four`'s own print.
+                    let mut args = Vec::new();
+                    for _ in 0..4 {
+                        args.push(self.expr_of(Ty::Int, d1));
+                    }
+                    format!("four({})", args.join(", "))
                 }
                 7..=8 => {
                     let a = self.expr_of(Ty::Str, d1);
@@ -736,6 +888,12 @@ impl<'r> Gen<'r> {
         }
         if d == 0 {
             return self.leaf_of(ty);
+        }
+        // A short left-nested chain, so the shape `Flavor::Deep` is built around
+        // also turns up inside ordinary programs rather than only at their top.
+        if (ty == Ty::Int || ty == Ty::Str) && self.chance(self.k.p_chain) {
+            let n = self.rng.gen_range(2..=30);
+            return self.chain(ty, n);
         }
         if self.chance(self.k.p_call) {
             return self.call_of(ty, d);
@@ -867,7 +1025,7 @@ impl<'r> Gen<'r> {
     fn while_stmt(&mut self, indent: usize, d: u32, in_fn: bool) {
         let c = format!("_c{}", self.counters);
         self.counters += 1;
-        let bound = self.rng.gen_range(1..=3);
+        let bound = self.rng.gen_range(1..=self.k.loop_bound);
         self.line(indent, &format!("let {c} = 0;"));
         self.line(indent, &format!("while {c} < {bound} {{"));
         self.block(indent + 1, d, in_fn);
@@ -888,7 +1046,14 @@ impl<'r> Gen<'r> {
 
     fn stmt(&mut self, indent: usize, d: u32, in_fn: bool) {
         if self.chance(self.k.p_print) {
-            let n = self.rng.gen_range(1..=3);
+            // §2 allows any number of tab-separated arguments; occasionally take
+            // that at its word, because "one line per print" is a rule about the
+            // count of lines, not about how much goes on one.
+            let n = if self.chance(6) {
+                self.rng.gen_range(7..=14)
+            } else {
+                self.rng.gen_range(1..=self.k.print_args)
+            };
             let mut args = Vec::new();
             for _ in 0..n {
                 args.push(self.expr_of(Ty::Any, self.k.expr_depth));
@@ -950,7 +1115,7 @@ impl<'r> Gen<'r> {
                 let bound: Vec<String> = self
                     .live(Ty::Any)
                     .into_iter()
-                    .filter(|n| NAMES.contains(&n.as_str()) || n == "p" || n == "q")
+                    .filter(|n| NAMES.contains(&n.as_str()) || n == "p" || n == "q" || n == "gw")
                     .collect();
                 if bound.is_empty() {
                     let ty = self.some_ty();
@@ -1029,7 +1194,7 @@ fn generate(rng: &mut StdRng, flavor: Flavor) -> String {
         body.declare("p", Ty::Int);
         body.declare("q", Ty::Int);
         body.counters = 1000;
-        let n = body.rng.gen_range(1..=3);
+        let n = body.rng.gen_range(1..=6);
         for _ in 0..n {
             body.stmt(1, STMT_DEPTH, true);
         }
@@ -1037,6 +1202,29 @@ fn generate(rng: &mut StdRng, flavor: Flavor) -> String {
     };
 
     let mut g = Gen::new(rng, k);
+    if k.deep {
+        // One deep shape per program, at the top so the rest of the program is
+        // still there to print if the shape is refused (§6c's limits are `Parse`
+        // errors, so a refusal actually costs the whole program — which is itself
+        // a thing both engines must do identically).
+        let arg = match g.rng.gen_range(0..3) {
+            0 => {
+                let n = *g.pick(CHAIN_LENS);
+                g.chain(Ty::Int, n)
+            }
+            1 => {
+                // A `Str` chain of the same shape: concatenation, so the growth
+                // of the accumulated string is stressed as well as the depth.
+                let n = (*g.pick(CHAIN_LENS)).min(2_000);
+                g.chain(Ty::Str, n)
+            }
+            _ => {
+                let n = *g.pick(NEST_LENS);
+                g.nest(n)
+            }
+        };
+        g.line(0, &format!("print {arg};"));
+    }
     if let Some(depth) = k.rec_depth {
         // `rec` recurses silently; `dp` prints on the way down, so the depth
         // error arrives *after* output and the partial-output rule is in play;
@@ -1159,14 +1347,22 @@ struct Stats {
     div_zero: usize,
     /// `se` was called, i.e. an `and`/`or` right operand was actually evaluated.
     side_effect_seen: usize,
+    /// §6c refused the program for nesting past `MAX_NEST`.
+    nest_limit: usize,
+    /// §6c refused the program for a tree deeper than `MAX_EXPR_DEPTH`.
+    tree_limit: usize,
     /// Total print lines across the corpus.
     total_lines: usize,
+    /// Longest rendered `Output` in bytes — the crude proxy for "programs got
+    /// somewhere" that no per-class counter gives.
+    widest_render: usize,
 }
 
 impl Stats {
     fn record(&mut self, out: &Output) {
         self.programs += 1;
         self.total_lines += out.lines.len();
+        self.widest_render = self.widest_render.max(out.to_string().len());
         if !out.lines.is_empty() {
             self.with_lines += 1;
         }
@@ -1201,6 +1397,15 @@ impl Stats {
                 }
                 if msg.contains("by zero") {
                     self.div_zero += 1;
+                }
+                // §6c. Matched on the rendered message for the same reason as
+                // the variants above; the wording is `error.rs`'s
+                // (`nesting_too_deep` / `expression_too_deep`), not ours.
+                if msg.contains("nested deeper than") {
+                    self.nest_limit += 1;
+                }
+                if msg.contains("deeper than") && msg.contains("nodes") {
+                    self.tree_limit += 1;
                 }
             }
         }
@@ -1290,34 +1495,44 @@ fn every_engine_agrees_on_every_generated_program() {
     );
 
     assert!(s.programs >= 1000, "{s:?}");
-    // Almost every program must be syntactically valid, or the fuzzer is
-    // testing the parser's error path and nothing else.
+    // Almost every program must be syntactically valid, or the fuzzer is testing
+    // the parser's error path and nothing else. The §6c refusals do not count:
+    // those are *deliberate*, generated by `Flavor::Deep` straddling `MAX_NEST`
+    // and `MAX_EXPR_DEPTH`, and both engines agreeing on the refusal is the
+    // assertion, not an accident to be minimised.
+    let accidental = s.lex + s.parse.saturating_sub(s.nest_limit + s.tree_limit);
     assert!(
-        s.lex + s.parse < s.programs / 50,
+        accidental < s.programs / 50,
         "too many programs never reached execution: {s:?}"
     );
     // ... and must get far enough to *do* something. Every floor below is a
     // regression guard set well under what the corpus measured when it was
     // written (the numbers in the comments), not a target to squeeze past.
-    assert!(s.clean > 100, "{s:?}"); // 158
-    assert!(s.with_lines > s.programs / 2, "{s:?}"); // 1076
-    assert!(s.total_lines > 5_000, "{s:?}"); // 8098
+    assert!(s.clean > 100, "{s:?}"); // 265
+    assert!(s.with_lines > s.programs / 2, "{s:?}"); // 1841
+    assert!(s.total_lines > 5_000, "{s:?}"); // 16536
                                              // §6/`.33`: output kept, then an error.
-    assert!(s.lines_then_error > 500, "{s:?}"); // 919
+    assert!(s.lines_then_error > 500, "{s:?}"); // 1577
                                                 // Every error class a *program* (rather than a broken engine) can cause.
-    assert!(s.type_err > 200, "{s:?}"); // 477
-    assert!(s.name > 20, "{s:?}"); // 117
-    assert!(s.value > 200, "{s:?}"); // 848
+    assert!(s.type_err > 200, "{s:?}"); // 1047
+    assert!(s.name > 20, "{s:?}"); // 193
+    assert!(s.value > 200, "{s:?}"); // 1638
                                      // The three seams most likely to diverge.
     assert!(
         s.depth_limit > 50,
         "the recursion limit was never hit: {s:?}"
-    ); // 121
-    assert!(s.overflow > 100, "no i64 boundary was crossed: {s:?}"); // 508
-    assert!(s.div_zero > 50, "no division or modulo by zero: {s:?}"); // 120
+    ); // 252
+    assert!(s.overflow > 100, "no i64 boundary was crossed: {s:?}"); // 833
+    assert!(s.div_zero > 50, "no division or modulo by zero: {s:?}"); // 322
                                                                       // Short-circuiting is only observable through a side effect, so a corpus
                                                                       // where `se` never ran cannot have tested it either way.
-    assert!(s.side_effect_seen > 300, "{s:?}"); // 802
+    assert!(s.side_effect_seen > 300, "{s:?}"); // 1117
+                                                // §6c, both limits, from both sides: a corpus that never crossed them never
+                                                // tested that the two engines refuse a program identically, and one that
+                                                // never got *under* them never tested the deep shape at all.
+    assert!(s.nest_limit > 5, "MAX_NEST was never crossed: {s:?}"); // 34
+    assert!(s.tree_limit > 5, "MAX_EXPR_DEPTH was never crossed: {s:?}"); // 23
+    assert!(s.widest_render > 2_000, "{s:?}"); // 20461
 }
 
 /// §3: "nothing observable may carry over between two `run` calls". The sweep
