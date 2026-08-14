@@ -676,3 +676,52 @@ because otherwise a `fn` inside a never-taken branch is defined in one engine an
 not the other) is documented in the code *and* in the outgoing message, not only
 in the close reason — which is the difference between a decision that survives
 and one that has to be rediscovered.
+
+---
+
+## State at handoff
+
+**110 claims checked across 14 closed beads — 102 VERIFIED, 3 UNVERIFIABLE, 5 FALSE.**
+
+| Bead | Author | Claims | V | U | F |
+|---|---|---|---|---|---|
+| `.8` token | token | 24 | 24 | 0 | 0 |
+| `.1` value | value | 26 | 24 | 2 | 0 |
+| `bd_30-agents-lpo` | orchestrator | 1 | 1 | 0 | 0 |
+| `.9` lexer | lexer | 21 | 19 | 1 | **1** |
+| `.4` spec audit | spec-adversary | 12 | 11 | 0 | 0 |
+| `.33`–`.38` spec | **orchestrator** | 6 | 5 | 0 | **1** |
+| `.47` `.48` | **orchestrator** | 9 | 9 | 0 | 0 |
+| `.29` `.30` dupes | — | 4 | 3 | 1 | 0 |
+| `.2` error | error | 19 | 16 | 1 | **2** |
+| `.10` ast | ast | 13 | 13 | 0 | 0 |
+
+Beads filed: `.47`, `.48` (both fixed and verified fixed), `.51`, `.52`
+(**against myself**), `.53`, `.56`.
+
+**This bead is NOT closed.** Closes were still landing when this was written and
+~35 epic beads remain open, so the backlog has not emptied. Closing it now while
+claiming the audit was complete would be exactly the kind of false close it
+exists to catch.
+
+### For whoever continues
+
+1. The monitor pattern that worked: snapshot all closed ids, then poll
+   `tools/pw bd list --status=closed --json | jq -r '.[].id'` and diff. Do **not**
+   filter on `parent == bd_30-agents-2jk` — three closed beads have no parent and
+   would be missed.
+2. Always run the **fidelity check** before believing any gate output:
+   `git show <commit>:<path> | diff - <auditwt>/<path>`. It caught a truncated
+   checkout that would have had me file a P1 against a correct agent.
+3. Audit at the **author's branch tip**, never master and never my worktree —
+   and check the **timing** of any claim about master, because master moves. `.2`
+   had a claim that was true at its close and false 92 seconds later.
+4. Unresolved: `.29`/`.30`'s "a `bd create` reported exit 1 while succeeding".
+   All 23 `bd create` records across every harness log show exit 0. Either the
+   exit code is misremembered, or some bd calls bypassed `tools/pw` — the brief's
+   "hole in the data". The two have very different implications and it is worth
+   settling.
+5. Outstanding asks, none answered yet: `.53` (the `.34` citation points at §6;
+   the rule is in §5 — and five of six spec beads carry copy-pasted evidence),
+   and the re-prioritisation call on `.51`/`.56`, both of which I flagged in
+   writing as over-filed at P1 by my own brief's mechanical rule.
