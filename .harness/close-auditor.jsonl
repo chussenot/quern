@@ -85,3 +85,5 @@
 {"at":"2026-08-14T08:43:16Z","agent":"close-auditor","tool":"pact","argv":"pact msg inbox","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:41:45Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.430,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:41:46Z","agent":"close-auditor","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.234,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:41:58Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.391,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:44:05Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=all --json","secs":0.418,"exit":0,"sigpipe":false,"stderr":""}
