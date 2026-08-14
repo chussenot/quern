@@ -1,0 +1,13 @@
+# 121 - the and-mirror of 120: the first false operand decides and the rest of
+# the chain is never called. The trailing print proves the program continued
+# rather than stopping.
+--- source
+fn a() { print "a"; return false; }
+fn b() { print "b"; return true; }
+fn c() { print "c"; return true; }
+print a() and b() and c();
+print "end";
+--- expect
+a
+false
+end

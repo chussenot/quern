@@ -1,0 +1,12 @@
+# 104 - §6 (.35): the compiler raises NO errors, so a body that cannot run is
+# still compiled clean and simply never executed. Neither the undefined
+# function nor the divide-by-zero inside it is ever reached, and the program
+# completes normally. An engine that resolved names or folded constants at
+# compile time would fail this program instead of running it.
+--- source
+if false {
+  print nope(1 / 0);
+}
+print "clean";
+--- expect
+clean

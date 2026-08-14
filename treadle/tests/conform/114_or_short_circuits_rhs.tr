@@ -1,0 +1,10 @@
+# 114 - SHORT-CIRCUIT MADE OBSERVABLE, or-form: `true or rhs` skips rhs
+# entirely, so again there is no "f called" line.
+--- source
+fn f() {
+  print "f called";
+  return true;
+}
+print true or f();
+--- expect
+true

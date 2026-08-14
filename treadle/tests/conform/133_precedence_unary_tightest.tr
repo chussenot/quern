@@ -1,0 +1,19 @@
+# 133 - rung 7, the tightest: prefix - and ! bind to their operand, not to the
+# whole expression. -2 + 3 is (-2) + 3 == 1, not -(2 + 3) == -5; and
+# !false and false is (!false) and false == false, not !(false and false)
+# == true; and !true or true is (!true) or true == true, not !(true or true)
+# == false. Lines 1, 2 and 4 each flip if unary is applied too late; line 3 is
+# there for a different reason - §6 (.41) says there are no negative literals,
+# so -2 is always Neg applied to the literal 2, and rung 7 is tighter than * so
+# the right operand of a * may itself be a unary expression, which a ladder
+# that only allowed unary at the front of a term would reject outright.
+--- source
+print -2 + 3;
+print !false and false;
+print -2 * -3;
+print !true or true;
+--- expect
+1
+false
+6
+true

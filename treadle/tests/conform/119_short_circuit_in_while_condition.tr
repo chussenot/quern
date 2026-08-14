@@ -1,0 +1,19 @@
+# 119 - short-circuit inside a while-condition, which is re-evaluated on every
+# test. Three iterations means the condition is tested four times, but on the
+# fourth test `i < 3` is false and gate() is NOT called - so there are exactly
+# three "gate" lines, not four. Counter-bounded (§6 .43).
+--- source
+fn gate() {
+  print "gate";
+  return true;
+}
+let i = 0;
+while i < 3 and gate() {
+  i = i + 1;
+}
+print "i", i;
+--- expect
+gate
+gate
+gate
+i	3

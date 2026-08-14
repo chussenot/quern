@@ -1,0 +1,11 @@
+# 116 - §6 (.40), short-circuit typing: the LEFT operand of and/or must be
+# Bool, and the right is type-checked ONLY if it is evaluated. So `false and 1`
+# is false and `true or nil` is true even though neither 1 nor nil is a Bool.
+# An engine that type-checked both operands up front - or that compiled the
+# rhs check before the jump - would raise a Type error here instead.
+--- source
+print false and 1;
+print true or nil;
+--- expect
+false
+true

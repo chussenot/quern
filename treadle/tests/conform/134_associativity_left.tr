@@ -1,0 +1,20 @@
+# 134 - ASSOCIATIVITY within one rung, which §2 pins the precedence of but not
+# the associativity of. Filed as bd_30-agents-2jk.54; this file assumes LEFT
+# associativity for every binary rung, which is Rust's own and consistent with
+# §2's "Rust's semantics" rule for / and %. Each line is a different answer,
+# not a different error, under the other reading:
+#   1 - 2 - 3     left -4    right  2
+#   12 / 3 / 2    left  2    right 12   (12 / (3 / 2) is 12 / 1)
+#   10 - 2 + 1    left  9    right  7   (mixed operators, same rung)
+#   23 % 10 % 4   left  3    right  1   (23 % (10 % 4) is 23 % 2)
+# The matching wrong-answer forms are all written out in 135.
+--- source
+print 1 - 2 - 3;
+print 12 / 3 / 2;
+print 10 - 2 + 1;
+print 23 % 10 % 4;
+--- expect
+-4
+2
+9
+3

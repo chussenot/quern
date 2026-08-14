@@ -1,0 +1,13 @@
+# 126 - §2: assignment WITHOUT `let` walks outward to the nearest existing
+# binding, so the block mutates the outer x rather than creating a local of its
+# own. Contrast 122, where the only difference is the keyword.
+--- source
+let x = 1;
+if true {
+  x = 2;
+  print "inner", x;
+}
+print "outer", x;
+--- expect
+inner	2
+outer	2

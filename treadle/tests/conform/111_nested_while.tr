@@ -1,0 +1,24 @@
+# 111 - nested counter-bounded loops, both bounded. `let j = 0;` is inside the
+# outer body, so re-entering that block must produce a FRESH binding each
+# pass; an engine that reused one slot without re-initialising it would run
+# the inner loop only once. The inner assignment reaches the inner j, the
+# outer assignment the outer i.
+--- source
+let i = 0;
+while i < 3 {
+  let j = 0;
+  while j < 2 {
+    print i, j;
+    j = j + 1;
+  }
+  i = i + 1;
+}
+print "end", i;
+--- expect
+0	0
+0	1
+1	0
+1	1
+2	0
+2	1
+end	3

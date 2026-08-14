@@ -1,0 +1,11 @@
+# 108 - a while loop whose condition is false on entry: zero iterations, so
+# the body's print never appears and the counter is untouched.
+--- source
+let i = 10;
+while i < 10 {
+  print "body";
+  i = i + 1;
+}
+print i;
+--- expect
+10

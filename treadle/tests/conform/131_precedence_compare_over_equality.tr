@@ -1,0 +1,13 @@
+# 131 - COMPARISON CHAINS. Rung 4 (< > <= >=) binds tighter than rung 3
+# (== !=), so `1 < 2 == true` groups as (1 < 2) == true. The wrong grouping is
+# 1 < (2 == true), which is a Type error twice over. Line 2 chains two
+# comparisons under one ==, line 3 chains them under a != with the mixed
+# >= / <= forms.
+--- source
+print 1 < 2 == true;
+print 3 > 2 == 2 > 1;
+print 1 >= 1 != 2 <= 1;
+--- expect
+true
+true
+true

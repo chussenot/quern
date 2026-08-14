@@ -1,0 +1,11 @@
+# 129 - PRECEDENCE, and it gives a DIFFERENT answer if the ladder is wrong:
+# rung 6 (* / %) binds tighter than rung 5 (+ -). A flat left-to-right parse
+# with no ladder gives 9 and 3; the correct answers are 7 and 2.
+--- source
+print 1 + 2 * 3;
+print 7 % 3 + 1;
+print 2 * 3 - 4 / 2;
+--- expect
+7
+2
+4

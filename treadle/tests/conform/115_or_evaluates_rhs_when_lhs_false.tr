@@ -1,0 +1,12 @@
+# 115 - the opposite of 114. f returns false, so the or-result is false too:
+# the value comes from the right operand, which also proves the engine did not
+# merely evaluate rhs for effect and then answer from lhs.
+--- source
+fn f() {
+  print "f called";
+  return false;
+}
+print false or f();
+--- expect
+f called
+false

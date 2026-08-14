@@ -1,0 +1,13 @@
+# 128 - §2: assignment with no `let` and no existing binding anywhere is a
+# runtime Name error, at the Assign statement's line (2). The line printed
+# before it is kept (§3), which is what makes this a two-part assertion rather
+# than just "it errored".
+#
+# Name wording from bead .39's table; see bd_30-agents-2jk.55.
+--- source
+print "before";
+y = 1;
+print "never";
+--- expect
+before
+error: Name at line 2: undefined variable 'y'

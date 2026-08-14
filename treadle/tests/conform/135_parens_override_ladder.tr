@@ -1,0 +1,20 @@
+# 135 - grouping parentheses override the ladder, which is what makes 129-134
+# real assertions rather than coincidences: every line here is written to
+# produce exactly the WRONG-LADDER answer from those files on purpose. If a
+# case in 129-134 and its partner here ever agree, the ladder is broken.
+#
+# §3's Expr has no Group variant, correctly - parens vanish into the tree - but
+# §2 never states that ( expr ) is a primary either. Also filed as
+# bd_30-agents-2jk.54.
+--- source
+print (1 + 2) * 3;
+print 1 - (2 - 3);
+print (true or false) and false;
+print -(2 + 3);
+print 12 / (3 / 2);
+--- expect
+9
+2
+false
+-5
+12

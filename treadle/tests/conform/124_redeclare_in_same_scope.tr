@@ -1,0 +1,12 @@
+# 124 - §6 (.37): re-declaring a name in the SAME scope is LEGAL, not an
+# error, and the later `let` wins. Each initialiser still sees the binding that
+# was current before its own `let`, so this is 1 -> 2 -> 20. An engine that
+# rejected the redeclaration, or that resolved all three lets to one slot
+# before running them, gets a different answer.
+--- source
+let x = 1;
+let x = x + 1;
+let x = x * 10;
+print x;
+--- expect
+20

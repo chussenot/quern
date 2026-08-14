@@ -1,0 +1,21 @@
+# 110 - a counter-bounded loop with an accumulator. §6 (.43): treadle has no
+# step, time or instruction limit and neither engine may invent one, so every
+# loop in this corpus is counter-bounded - an unbounded one would hang
+# `cargo test` rather than fail it. Printing both i and the running total each
+# pass pins the iteration count AND the order of the two assignments.
+--- source
+let i = 0;
+let total = 0;
+while i < 5 {
+  i = i + 1;
+  total = total + i;
+  print i, total;
+}
+print "sum", total;
+--- expect
+1	1
+2	3
+3	6
+4	10
+5	15
+sum	15

@@ -1,0 +1,12 @@
+# 120 - a chain of ors stops at the first operand that decides, evaluated left
+# to right (§6 .33), so a() runs and neither b() nor c() does. Holds under
+# either associativity, which is deliberate: this case is about
+# short-circuiting, not about grouping (see 134 for grouping).
+--- source
+fn a() { print "a"; return true; }
+fn b() { print "b"; return true; }
+fn c() { print "c"; return true; }
+print a() or b() or c();
+--- expect
+a
+true

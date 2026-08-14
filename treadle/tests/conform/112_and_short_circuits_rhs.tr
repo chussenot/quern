@@ -1,0 +1,14 @@
+# 112 - SHORT-CIRCUIT MADE OBSERVABLE, and-form. §2/§6 (.40): `false and rhs`
+# does not evaluate rhs, so f() is never called and never prints. The whole
+# assertion is the ABSENCE of an "f called" line before `false`. This is the
+# case most likely to catch a real divergence: the VM compiles and/or as a
+# conditional jump over the rhs, while a tree-walker must special-case the
+# node before recursing - two entirely different mechanisms for one rule.
+--- source
+fn f() {
+  print "f called";
+  return true;
+}
+print false and f();
+--- expect
+false

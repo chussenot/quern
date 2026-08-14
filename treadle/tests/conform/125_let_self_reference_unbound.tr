@@ -1,0 +1,13 @@
+# 125 - §6 (.37), the other half of 123: with no outer x ANYWHERE, the
+# initialiser of `let x = x + 1;` has nothing to read, so it is a runtime Name
+# error at the Var's line - raised while evaluating the initialiser, before any
+# binding for x exists. Output is empty: the error is on line 1, so Display for
+# Output renders only the error line.
+#
+# Name wording is taken from bead .39's table; error.rs is still a stub on
+# master, so this is the only source for it (see bd_30-agents-2jk.55).
+--- source
+let x = x + 1;
+print x;
+--- expect
+error: Name at line 1: undefined variable 'x'

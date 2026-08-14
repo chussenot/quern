@@ -1,0 +1,16 @@
+# 123 - §6 (.37), PINNED: the initialiser is evaluated in the scope as it
+# exists BEFORE the new binding is created. With an outer x at 1,
+# `let x = x + 1;` in a nested block reads the OUTER x and binds a NEW inner x
+# at 2, leaving the outer one untouched. A compiler that declared the slot
+# before emitting the initialiser would read its own uninitialised local
+# instead - which is why .37 says emit the initialiser first.
+--- source
+let x = 1;
+if true {
+  let x = x + 1;
+  print "inner", x;
+}
+print "outer", x;
+--- expect
+inner	2
+outer	1

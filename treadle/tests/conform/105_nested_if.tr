@@ -1,0 +1,21 @@
+# 105 - nested if: the inner if is only reached when the outer condition held,
+# so the second, outer-false pair emits nothing at all.
+--- source
+let a = 5;
+let b = 10;
+if a > 1 {
+  if b > 5 {
+    print "both";
+  } else {
+    print "outer only";
+  }
+} else {
+  print "neither";
+}
+if a > 100 {
+  if b > 5 { print "unreachable"; }
+}
+print "done";
+--- expect
+both
+done

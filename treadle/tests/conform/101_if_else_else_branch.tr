@@ -1,0 +1,7 @@
+# 101 - if/else with a false condition: the mirror of 100. Exactly one of the
+# two branches ever contributes a line to Output.
+--- source
+let x = 1;
+if x > 2 { print "then"; } else { print "else"; }
+--- expect
+else
