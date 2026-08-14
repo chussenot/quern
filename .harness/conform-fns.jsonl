@@ -34,3 +34,5 @@
 {"at":"2026-08-14T08:46:13Z","agent":"conform-fns","tool":"pact","argv":"pact msg read pact-msg-14d8f2f2ab50d68a","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:46:21Z","agent":"conform-fns","tool":"bd","argv":"bd create --help","secs":0.074,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:46:40Z","agent":"conform-fns","tool":"bd","argv":"bd create pact lease acquire with several paths stores ONE composite lease, so no individual path is protected --type=bug -p 2 --parent=bd_30-agents-2jk -l harness,pact --body-file /home/chussenot/.tmpx/bead_pact.md","secs":0.652,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:28Z","agent":"conform-fns","tool":"bd","argv":"bd create spec gap: is an empty braced body legal? fn f() { }, if c { }, while c { } --type=bug -p 2 --parent=bd_30-agents-2jk -l spec-gap,treadle --body-file /home/chussenot/.tmpx/bead_empty.md","secs":0.988,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:48:05Z","agent":"conform-fns","tool":"pact","argv":"pact msg inbox","secs":0.037,"exit":0,"sigpipe":false,"stderr":""}

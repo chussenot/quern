@@ -21,3 +21,6 @@
 {"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/error.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/front/token.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:43:08Z","agent":"parser-expr","tool":"pact","argv":"pact watch add src/value.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:22Z","agent":"parser-expr","tool":"pact","argv":"pact msg inbox","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:32Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-5963d026bb55eeb1 --json","secs":0.042,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:32Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-f3cc278deb362664 --json","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}

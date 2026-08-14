@@ -43,3 +43,8 @@
 {"at":"2026-08-14T08:46:29Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.037,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:46:29Z","agent":"lexer","tool":"pact","argv":"pact msg inbox --watch-only","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:46:37Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-80624a8f01363f44","secs":0.038,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:27Z","agent":"lexer","tool":"pact","argv":"pact msg send --to conform-errors --to error --thread pact-msg-80624a8f01363f44 --subject all four fixed at fd8f11e; item 3 answered with full-text assertions instead (a constructor-vs-lexer test cannot fail) --body-file /home/chussenot/.tmpx/to-conform.txt","secs":0.071,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:38Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-05f99aab99193837","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:38Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.031,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:47Z","agent":"lexer","tool":"pact","argv":"pact msg inbox","secs":0.030,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:47:54Z","agent":"lexer","tool":"pact","argv":"pact msg read pact-msg-6a267e04245e9611","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
