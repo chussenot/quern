@@ -285,6 +285,31 @@ to a minimal reproduction is worth building if time allows; say so either way.
 `rand` (dev-only, for the fuzzer's seeded generator). Anything else needs a
 comment arguing for it.
 
+## 6b. Which line an `as_bool` failure reports (bead `.uzm`)
+
+§6/`.40` routes `if`/`while` conditions **and** `and`/`or` operands through one
+`Value::as_bool`, and never said which line the error carries. It matters only
+when an operator is split across source lines:
+
+```
+print 1
+and true;
+```
+
+**Normative: the error reports the line of the FAILING OPERAND**, not the line
+of the `Binary` node. So the example above reports line 1, where the `1` is.
+
+Chosen because both engines can reach it without agreeing on anything else: the
+tree-walker has the operand's own `Expr` node and its `line`; the VM's compiler
+emits `AsBool` immediately after the operand's code and so has that same line to
+put in the line table. Pinning the `Binary` node's line instead would require
+both engines to agree on how the parser assigns an operator node's line, which is
+a second convention to keep in step for no gain.
+
+`tree/eval.rs` currently uses the `Binary` node's line and must change — that is
+why `eval-expr` filed this rather than reading `src/vm/` to see what group A did,
+which is exactly the behaviour the isolation rule is for.
+
 ## 6a. Error wording: the landed `value.rs` is the spec (bead `.55`)
 
 Bead `.39` proposed a table of operator and builtin error messages. It never
