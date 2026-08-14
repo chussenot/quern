@@ -30,3 +30,4 @@
 {"at":"2026-08-14T09:31:17Z","agent":"orchestrator","tool":"pact","argv":"pact lease release treadle/tests/conform/128_assign_unbound_is_name_error.tr docs/treadle.md","secs":0.072,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:27:08Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire src/vm/mod.rs --note P1 engine asymmetry: group A's Engine::run lacks group B's big-stack thread, so tree returns 20001 where vm aborts --ttl 900","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T12:29:12Z","agent":"orchestrator","tool":"pact","argv":"pact lease release src/vm/mod.rs","secs":0.019,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T12:46:31Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.020,"exit":0,"sigpipe":false,"stderr":""}
