@@ -299,6 +299,18 @@ and true;
 **Normative: the error reports the line of the FAILING OPERAND**, not the line
 of the `Binary` node. So the example above reports line 1, where the `1` is.
 
+**With one necessary fallback (bead `.pqj`).** The frozen `Expr::Lit(Value)`
+carries **no line**, so a literal operand has no line of its own and the rule
+above is unimplementable for `true and 1`. In that case — and only that case —
+report the line of the **enclosing node**. Both engines must use the same
+fallback, so express it as a single `line_of(&Expr) -> u32` helper that returns
+the node's own line where it has one and the enclosing line where it does not,
+rather than scattering the decision. `vm/compiler.rs` already implements it that
+way; `tree/eval.rs` must match. Found by `compiler-expr`, which filed it instead
+of reading `src/tree/` to see what the other engine had done — the fallback is
+observable whenever an operator is split across lines, so guessing would have
+produced exactly the unattributable divergence this run exists to prevent.
+
 Chosen because both engines can reach it without agreeing on anything else: the
 tree-walker has the operand's own `Expr` node and its `line`; the VM's compiler
 emits `AsBool` immediately after the operand's code and so has that same line to

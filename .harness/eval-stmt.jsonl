@@ -1,0 +1,11 @@
+{"at":"2026-08-14T09:09:34Z","agent":"eval-stmt","tool":"pact","argv":"pact msg inbox","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:09:34Z","agent":"eval-stmt","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:09:42Z","agent":"eval-stmt","tool":"pact","argv":"pact msg read pact-msg-d338e60c9657fa5c","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:09:50Z","agent":"eval-stmt","tool":"pact","argv":"pact msg read pact-msg-8c45cc99a1e5c184","secs":0.049,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:09:50Z","agent":"eval-stmt","tool":"pact","argv":"pact msg read pact-msg-ec7b6bf66f487311","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:10:14Z","agent":"eval-stmt","tool":"pact","argv":"pact msg read pact-msg-abe1213911766f2b","secs":0.046,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:10:23Z","agent":"eval-stmt","tool":"bd","argv":"bd update bd_30-agents-2jk.20 --claim","secs":0.359,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:10:24Z","agent":"eval-stmt","tool":"bd","argv":"bd show bd_30-agents-2jk.20","secs":0.343,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:10:32Z","agent":"eval-stmt","tool":"pact","argv":"pact lease acquire src/tree/eval.rs src/tree/mod.rs --note bead .20: statement execution, control flow, recursion limit, impl Engine for the tree engine","secs":0.062,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/tree/eval.rs was last released by eval-expr (5m35s ago) — their note: bd_30-agents-2jk.19: expression half of the tree-walking evaluator; eval-stmt (.20) takes the file after me. `"}
+{"at":"2026-08-14T09:10:32Z","agent":"eval-stmt","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:15:14Z","agent":"eval-stmt","tool":"pact","argv":"pact lease acquire tests/conform.rs --note bead .20: the one-line engines() registration for the tree engine + dropping #[ignore]; nothing else in the file","secs":0.047,"exit":0,"sigpipe":false,"stderr":"note: treadle/tests/conform.rs was last released by conform-runner (11m46s ago) — their note: writing the conformance runner (bd .21): .tr parser + byte-exact canonical-rendering comparison over bot"}

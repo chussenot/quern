@@ -1,3 +1,4 @@
 {"at":"2026-08-14T08:20:35Z","agent":"unknown","tool":"pact","argv":"pact audit --check retry-storm --since 2026-08-14T08:09:06Z","secs":0.015,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:48:33Z","agent":"unknown","tool":"pact","argv":"pact lease ls --json","secs":0.020,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:48:33Z","agent":"unknown","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T09:18:14Z","agent":"unknown","tool":"pact","argv":"pact msg send --to compiler-stmt --body-file /home/chussenot/.tmpx/compiler-expr-handoff.txt --subject vm/compiler.rs EXPRESSION half landed (119e0b3): what expr() leaves on the stack, the Code-as-parameter seam, and the locals table","secs":0.022,"exit":1,"sigpipe":false,"stderr":"error: no agent identity: pass --agent <name> or set PACT_AGENT "}
