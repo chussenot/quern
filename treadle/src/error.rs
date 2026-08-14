@@ -356,10 +356,17 @@ impl TreadleError {
     /// Takes no limit argument on purpose: the number comes from [`MAX_DEPTH`],
     /// so one engine cannot report a different one. `line` is the line of the
     /// failing **call** expression.
+    /// The wording says **active invocations**, not "frames", deliberately (bead
+    /// `.72`): §6 `.36` retired the word "frames" because it was the ambiguity —
+    /// the VM's frame stack naturally counts the top-level chunk while the
+    /// tree-walker's depth counter does not, so "1000 frames" meant 999 user
+    /// calls in one engine and 1000 in the other. Leaving the retired word in the
+    /// user-facing message would send the next reader looking for a discrepancy
+    /// that is only lexical.
     pub fn recursion_limit(line: u32) -> TreadleError {
         TreadleError::Value {
             line,
-            msg: format!("recursion limit of {MAX_DEPTH} frames exceeded"),
+            msg: format!("recursion limit of {MAX_DEPTH} active invocations exceeded"),
         }
     }
 
@@ -567,10 +574,13 @@ mod tests {
         let e = TreadleError::recursion_limit(42);
         assert_eq!(e.variant(), "Value");
         assert_eq!(e.line(), 42);
-        assert_eq!(e.msg(), "recursion limit of 1000 frames exceeded");
+        assert_eq!(
+            e.msg(),
+            "recursion limit of 1000 active invocations exceeded"
+        );
         assert_eq!(
             e.to_string(),
-            "error: Value at line 42: recursion limit of 1000 frames exceeded"
+            "error: Value at line 42: recursion limit of 1000 active invocations exceeded"
         );
     }
 

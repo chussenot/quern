@@ -21,4 +21,4 @@ fn down(n) {
 }
 print down(1000);
 --- expect
-error: Value at line 3: recursion limit of 1000 frames exceeded
+error: Value at line 3: recursion limit of 1000 active invocations exceeded

@@ -15,4 +15,4 @@ print deep(50000);
 --- expect
 start
 2
-error: Value at line 5: recursion limit of 1000 frames exceeded
+error: Value at line 5: recursion limit of 1000 active invocations exceeded

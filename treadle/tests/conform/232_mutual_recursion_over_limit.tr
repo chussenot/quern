@@ -16,4 +16,4 @@ fn b(n) {
 }
 print a(500);
 --- expect
-error: Value at line 6: recursion limit of 1000 frames exceeded
+error: Value at line 6: recursion limit of 1000 active invocations exceeded
