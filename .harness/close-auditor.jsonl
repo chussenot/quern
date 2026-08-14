@@ -75,3 +75,5 @@
 {"at":"2026-08-14T08:38:31Z","agent":"close-auditor","tool":"bd","argv":"bd list --parent=bd_30-agents-2jk","secs":1.381,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:39:07Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.349,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:39:26Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.346,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:40:27Z","agent":"close-auditor","tool":"bd","argv":"bd create --type=bug -p 1 --parent=bd_30-agents-2jk -l audit,treadle --title=treadle(audit): bd_30-agents-2jk.2 closed on two false numbers — and that is now a PATTERN across three agents: every FALSE claim in run 6 is an unmeasured number quoted as fact --description=Consolidated deliberately. Five false claims have now been found in run 6 and every single one is a number the author could have","secs":0.640,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:40:41Z","agent":"close-auditor","tool":"bd","argv":"bd list --status=closed --json","secs":0.365,"exit":0,"sigpipe":false,"stderr":""}
