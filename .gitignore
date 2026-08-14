@@ -22,3 +22,4 @@ Cargo.lock
 # run 6: harness instrumentation is telemetry, like .pact/ logs — it is history
 !.harness/
 /treadle/target
+wt6/
