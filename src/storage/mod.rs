@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::catalog::Catalog;
+use crate::txn::{TxnHost, TxnState};
 use crate::types::{QuernError, Result, Row, RowId, Schema, Type, Value};
 use btree::BTree;
 use heap::Heap;
@@ -68,8 +69,9 @@ pub struct Db {
     /// Keyed by ASCII-lowercased table name (§1: names are case-insensitive).
     /// `BTreeMap`, not `HashMap`: the metadata page must encode deterministically.
     tables: BTreeMap<String, Table>,
-    txn: Option<u64>,
-    next_txn: u64,
+    /// Transaction state and the commit ordering both live in `txn.rs`; this
+    /// type only supplies the accessors [`TxnHost`] asks for.
+    txn: TxnState,
     /// DDL done inside the open transaction, in order. §6: DDL takes effect
     /// immediately and ROLLBACK does not undo it — but rollback discards the
     /// pager's dirty map wholesale, DDL pages included, so `rollback` re-applies
@@ -102,32 +104,23 @@ impl Db {
             wal,
             catalog,
             tables,
-            txn: None,
-            next_txn: 1,
+            txn: TxnState::new(),
             txn_ddl: Vec::new(),
         };
-        db.recover()?;
+        // `TxnHost::recover` owns the sequence — replay, apply, flush,
+        // checkpoint — and only the per-record work is ours. `replay()` returns
+        // the mutations of committed transactions only: a rolled-back or crashed
+        // txn wrote no commit record and is discarded by the same filter.
+        db.recover(|db, rec| {
+            db.reapply(rec)?;
+            db.persist_meta()
+        })?;
         Ok(db)
     }
 
     /// The tables the catalog knows about, for callers that need a schema.
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
-    }
-
-    fn recover(&mut self) -> Result<()> {
-        // replay() returns only the mutations of committed transactions, in LSN
-        // order; a rolled-back or crashed txn wrote no commit record and is
-        // therefore indistinguishable from — and discarded like — the other.
-        for rec in self.wal.replay()? {
-            self.reapply(&rec)?;
-        }
-        self.persist_meta()?;
-        self.pager.flush()?;
-        // Unconditional, even when nothing was replayed: the log may still hold
-        // the records of an aborted txn, and a fresh process restarts txn ids
-        // at 1, so those bytes must not outlive this call.
-        self.wal.checkpoint()
     }
 
     fn reapply(&mut self, rec: &WalRecord) -> Result<()> {
@@ -172,35 +165,6 @@ impl Db {
         self.tables
             .get(&Self::key(table))
             .ok_or_else(|| QuernError::Catalog(format!("no such table: {table}")))
-    }
-
-    /// The txn id this statement runs under: the open one, or a fresh implicit
-    /// one that [`Db::finish_stmt`] commits (§4).
-    fn stmt_txn(&mut self) -> u64 {
-        match self.txn {
-            Some(id) => id,
-            None => {
-                let id = self.next_txn;
-                self.next_txn += 1;
-                id
-            }
-        }
-    }
-
-    fn finish_stmt(&mut self, txn: u64) -> Result<()> {
-        if self.txn.is_none() {
-            self.commit_txn(txn)?;
-        }
-        Ok(())
-    }
-
-    /// The ordering rule: the WAL is durable BEFORE the data pages. Nothing but
-    /// this enforces it. The checkpoint comes last, once the pages are on disk
-    /// and the log's redo is spent.
-    fn commit_txn(&mut self, txn: u64) -> Result<()> {
-        self.wal.commit(txn)?;
-        self.pager.flush()?;
-        self.wal.checkpoint()
     }
 
     fn load_meta(pager: &Pager) -> Result<(Catalog, BTreeMap<String, Table>)> {
@@ -383,6 +347,39 @@ impl Db {
     }
 }
 
+/// The four accessors `txn.rs` needs. Everything transactional — the commit
+/// ordering, the implicit transaction, the recovery checkpoint — lives there and
+/// is reached through this impl, so there is exactly one copy of each rule.
+impl TxnHost for Db {
+    fn txn(&mut self) -> &mut TxnState {
+        &mut self.txn
+    }
+
+    fn wal(&mut self) -> &mut Wal {
+        &mut self.wal
+    }
+
+    /// Pages durable, and then — because they are — the log's redo is spent, so
+    /// truncate it. The checkpoint belongs here rather than at the `commit` call
+    /// site: `flush` is exactly the moment its precondition becomes true, and
+    /// `txn.rs` calls this from both `commit` and `recover`. Without it a clean
+    /// commit leaves records in the log that the next `open` would re-apply on
+    /// top of the pages that already hold them, and re-applying an insert
+    /// allocates a fresh `RowId`, so replay is not idempotent.
+    fn flush(&mut self) -> Result<()> {
+        self.pager.flush()?;
+        self.wal.checkpoint()
+    }
+
+    /// Reopen the pager: drops the dirty-page map and the `page_count` that
+    /// `allocate_page` bumped, and rebuilds the catalog and per-table roots from
+    /// the file — the heap and B-tree state above the pager, which would
+    /// otherwise still point into discarded pages.
+    fn discard(&mut self) -> Result<()> {
+        self.reload()
+    }
+}
+
 impl Storage for Db {
     fn create_table(&mut self, schema: &Schema) -> Result<()> {
         if let Some(i) = schema.primary_key() {
@@ -393,66 +390,73 @@ impl Storage for Db {
                 )));
             }
         }
-        self.catalog.create(schema.clone())?;
-        let pk = schema.primary_key();
-        let heap = Heap::create(&mut self.pager)?;
-        let index = match pk {
-            Some(_) => Some(BTree::create(&mut self.pager)?),
-            None => None,
-        };
-        self.tables
-            .insert(Self::key(&schema.table), Table { heap, index, pk });
-        self.persist_meta()?;
-        if self.txn.is_some() {
-            self.txn_ddl.push(Ddl::Create(schema.clone()));
-        }
-        let txn = self.stmt_txn();
-        self.finish_stmt(txn)
+        // Whether the DDL has to be replayed on ROLLBACK depends on there being
+        // a user transaction around it — which `statement` is about to open one
+        // if there isn't, so ask before entering it.
+        let in_txn = self.txn.is_open();
+        self.statement(|db, _txn| {
+            db.catalog.create(schema.clone())?;
+            let pk = schema.primary_key();
+            let heap = Heap::create(&mut db.pager)?;
+            let index = match pk {
+                Some(_) => Some(BTree::create(&mut db.pager)?),
+                None => None,
+            };
+            db.tables
+                .insert(Self::key(&schema.table), Table { heap, index, pk });
+            db.persist_meta()?;
+            if in_txn {
+                db.txn_ddl.push(Ddl::Create(schema.clone()));
+            }
+            Ok(())
+        })
     }
 
     fn drop_table(&mut self, table: &str) -> Result<()> {
         // ponytail: the heap and index pages of a dropped table are not
         // reclaimed — the pager has no free list (§4). Needs one, plus a page
         // walk, if a workload ever churns tables.
-        self.catalog.drop(table)?;
-        self.tables.remove(&Self::key(table));
-        self.persist_meta()?;
-        if self.txn.is_some() {
-            self.txn_ddl.push(Ddl::Drop(table.to_string()));
-        }
-        let txn = self.stmt_txn();
-        self.finish_stmt(txn)
+        let in_txn = self.txn.is_open();
+        self.statement(|db, _txn| {
+            db.catalog.drop(table)?;
+            db.tables.remove(&Self::key(table));
+            db.persist_meta()?;
+            if in_txn {
+                db.txn_ddl.push(Ddl::Drop(table.to_string()));
+            }
+            Ok(())
+        })
     }
 
     fn insert(&mut self, table: &str, row: &Row) -> Result<RowId> {
-        let txn = self.stmt_txn();
-        // Apply first, log second: a rejected mutation must not leave a record
-        // that recovery would try — and fail — to re-apply. Within a txn the
-        // order is free; only `commit` has to fsync the log before the pages.
-        let id = self.apply_insert(table, row)?;
-        self.wal.append(txn, KIND_INSERT, table, &encode_row(row))?;
-        self.persist_meta()?;
-        self.finish_stmt(txn)?;
-        Ok(id)
+        self.statement(|db, txn| {
+            // Apply first, log second: a rejected mutation must not leave a
+            // record that recovery would try — and fail — to re-apply. Within a
+            // txn the order is free; only `commit` fsyncs the log before the
+            // pages, and that order lives in `txn.rs`.
+            let id = db.apply_insert(table, row)?;
+            db.wal.append(txn, KIND_INSERT, table, &encode_row(row))?;
+            db.persist_meta()?;
+            Ok(id)
+        })
     }
 
     fn delete(&mut self, table: &str, id: RowId) -> Result<()> {
-        let txn = self.stmt_txn();
-        self.apply_delete(table, id)?;
-        self.wal
-            .append(txn, KIND_DELETE, table, &id.to_le_bytes())?;
-        self.persist_meta()?;
-        self.finish_stmt(txn)
+        self.statement(|db, txn| {
+            db.apply_delete(table, id)?;
+            db.wal.append(txn, KIND_DELETE, table, &id.to_le_bytes())?;
+            db.persist_meta()
+        })
     }
 
     fn update(&mut self, table: &str, id: RowId, row: &Row) -> Result<()> {
-        let txn = self.stmt_txn();
-        self.apply_update(table, id, row)?;
-        let mut payload = id.to_le_bytes().to_vec();
-        payload.extend_from_slice(&encode_row(row));
-        self.wal.append(txn, KIND_UPDATE, table, &payload)?;
-        self.persist_meta()?;
-        self.finish_stmt(txn)
+        self.statement(|db, txn| {
+            db.apply_update(table, id, row)?;
+            let mut payload = id.to_le_bytes().to_vec();
+            payload.extend_from_slice(&encode_row(row));
+            db.wal.append(txn, KIND_UPDATE, table, &payload)?;
+            db.persist_meta()
+        })
     }
 
     fn scan(&self, table: &str) -> Result<Box<dyn Iterator<Item = Result<(RowId, Row)>> + '_>> {
@@ -480,35 +484,28 @@ impl Storage for Db {
     }
 
     fn begin(&mut self) -> Result<()> {
-        if self.txn.is_some() {
-            return Err(QuernError::Txn("BEGIN inside a transaction".into()));
-        }
-        self.txn = Some(self.stmt_txn());
-        Ok(())
+        TxnHost::begin(self).map(|_| ())
     }
 
     fn commit(&mut self) -> Result<()> {
-        let txn = self
-            .txn
-            .take()
-            .ok_or_else(|| QuernError::Txn("COMMIT outside a transaction".into()))?;
         self.txn_ddl.clear();
-        self.commit_txn(txn)
+        TxnHost::commit(self)
     }
 
     fn rollback(&mut self) -> Result<()> {
-        self.txn
-            .take()
-            .ok_or_else(|| QuernError::Txn("ROLLBACK outside a transaction".into()))?;
         let ddl = std::mem::take(&mut self.txn_ddl);
-        self.reload()?;
+        // Ends the transaction and discards the in-memory work; the WAL is
+        // deliberately untouched, because the absence of a commit record IS the
+        // rollback. Both rules live in `txn.rs`.
+        TxnHost::rollback(self)?;
         // §6: DDL takes effect immediately and ROLLBACK does not undo it. The
-        // reload above threw it away with the row work, because a DDL inside an
+        // discard above threw it away with the row work, because a DDL inside an
         // open transaction has only ever reached the pager's dirty map — so
         // re-do it here instead. Flushing it at DDL time is what does NOT work:
         // that would flush the transaction's row pages with it, and those must
-        // die here. Now that the txn is closed each of these commits itself, and
-        // the only dirty pages it can flush are the ones it just made.
+        // die here. Now that the txn is closed each of these runs in its own
+        // implicit transaction, and the only dirty pages it can flush are the
+        // ones it just made.
         for op in ddl {
             match op {
                 Ddl::Create(schema) => self.create_table(&schema)?,
@@ -729,14 +726,14 @@ mod tests {
     fn rollback_keeps_ddl_but_still_discards_the_rows() {
         let (dir, mut db) = fresh();
         let ada = db.insert("t", &row(1, "ada")).unwrap();
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.insert("t", &row(2, "bob")).unwrap();
         db.create_table(&Schema {
             table: "dtxn".into(),
             columns: vec![col("a", Type::Int, true)],
         })
         .unwrap();
-        db.rollback().unwrap();
+        Storage::rollback(&mut db).unwrap();
 
         // The table survived, and its index is USABLE — the failure this guards
         // against is a table that comes back with a btree root pointing at a
@@ -750,9 +747,9 @@ mod tests {
         assert_eq!(rows(&db, "t"), vec![(ada, row(1, "ada"))]);
 
         // A DROP inside a transaction is not undone either.
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.drop_table("dtxn").unwrap();
-        db.rollback().unwrap();
+        Storage::rollback(&mut db).unwrap();
         assert!(matches!(
             db.scan("dtxn").err(),
             Some(QuernError::Catalog(_))
@@ -772,17 +769,26 @@ mod tests {
     fn rollback_discards_the_transaction() {
         let (dir, mut db) = fresh();
         let id = db.insert("t", &row(1, "ada")).unwrap();
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.insert("t", &row(2, "bob")).unwrap();
         assert_eq!(rows(&db, "t").len(), 2);
-        db.rollback().unwrap();
+        Storage::rollback(&mut db).unwrap();
 
         assert_eq!(rows(&db, "t"), vec![(id, row(1, "ada"))]);
         assert_eq!(db.lookup_pk("t", 2).unwrap(), None);
-        assert!(matches!(db.rollback().err(), Some(QuernError::Txn(_))));
-        assert!(matches!(db.commit().err(), Some(QuernError::Txn(_))));
-        db.begin().unwrap();
-        assert!(matches!(db.begin().err(), Some(QuernError::Txn(_))));
+        assert!(matches!(
+            Storage::rollback(&mut db).err(),
+            Some(QuernError::Txn(_))
+        ));
+        assert!(matches!(
+            Storage::commit(&mut db).err(),
+            Some(QuernError::Txn(_))
+        ));
+        Storage::begin(&mut db).unwrap();
+        assert!(matches!(
+            Storage::begin(&mut db).err(),
+            Some(QuernError::Txn(_))
+        ));
         drop(db);
 
         // And it is gone from the file too, not just from memory.
@@ -793,10 +799,10 @@ mod tests {
     #[test]
     fn commit_persists_across_a_reopen() {
         let (dir, mut db) = fresh();
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.insert("t", &row(1, "ada")).unwrap();
         db.insert("t", &row(2, "bob")).unwrap();
-        db.commit().unwrap();
+        Storage::commit(&mut db).unwrap();
         drop(db);
 
         let db = Db::open(dir.path()).unwrap();
@@ -834,10 +840,10 @@ mod tests {
     fn reopen_replays_a_committed_txn_whose_pages_never_reached_disk() {
         let (dir, mut db) = fresh();
         let id = db.insert("t", &row(1, "ada")).unwrap();
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.insert("t", &row(2, "bob")).unwrap();
         db.update("t", id, &row(1, "ADA")).unwrap();
-        let txn = db.txn.take().unwrap();
+        let txn = db.txn.end("COMMIT").unwrap();
         // The crash window: the WAL is fsynced by commit(), and then the
         // process dies before pager.flush() — so drop the Db without flushing.
         db.wal.commit(txn).unwrap();
@@ -858,7 +864,7 @@ mod tests {
     #[test]
     fn an_uncommitted_txn_is_never_replayed() {
         let (dir, mut db) = fresh();
-        db.begin().unwrap();
+        Storage::begin(&mut db).unwrap();
         db.insert("t", &row(1, "ada")).unwrap();
         // No commit record: identical bytes to a kill -9, discarded the same way.
         drop(db);
