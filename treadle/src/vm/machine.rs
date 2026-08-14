@@ -606,6 +606,46 @@ mod tests {
         );
     }
 
+    /// `and`/`or` have no instruction — they are the jump shape in opcode's
+    /// contract, and this asserts the machine implements exactly it: the left
+    /// operand is always type-checked (`JumpIfFalse` pops it through
+    /// `as_bool`), the right one only on the path where it is evaluated, and
+    /// the result is always a `Bool`. §6/`.40`.
+    #[test]
+    fn machine_and_shape_short_circuits_and_types_only_a_taken_rhs() {
+        // print <lhs> and 1;   with the rhs on line 2.
+        let and = |lhs: Value| {
+            let c = chunk(|c| {
+                let l = c.add_const(lhs);
+                let one = c.add_const(Value::Int(1));
+                let f = c.add_const(Value::Bool(false));
+                c.main.emit(Op::Const(l), 1);
+                let skip = c.main.emit_jump(Op::JumpIfFalse, 1);
+                c.main.emit(Op::Const(one), 2);
+                c.main.emit(Op::AsBool, 2);
+                let done = c.main.emit_jump(Op::Jump, 1);
+                c.main.patch_jump(skip);
+                c.main.emit(Op::Const(f), 1);
+                c.main.patch_jump(done);
+                c.main.emit(Op::Print(1), 1);
+            });
+            assert_eq!(c.validate(), Ok(()));
+            run(&c).to_string()
+        };
+        // The rhs is never touched, so its type never matters.
+        assert_eq!(and(Value::Bool(false)), "false\n");
+        // Evaluated, so `AsBool` raises at the RHS's line, not the lhs's.
+        assert_eq!(
+            and(Value::Bool(true)),
+            format!("{}\n", TreadleError::not_bool(2, "Int"))
+        );
+        // The lhs is type-checked on both paths, by the same `as_bool`.
+        assert_eq!(
+            and(Value::Nil),
+            format!("{}\n", TreadleError::not_bool(1, "Nil"))
+        );
+    }
+
     /// A forward jump: `if false { print 1; } print 2;`.
     #[test]
     fn machine_jumps_forward_over_an_untaken_branch() {
