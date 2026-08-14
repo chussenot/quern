@@ -1,0 +1,13 @@
+# 307: line tracking THROUGH a multi-line string literal. The literal spans lines
+# 1-3, so the two newlines inside it must advance the line counter: the failing
+# `1 / 0` is on line 5, and a lexer that did not count them would report 3.
+# len() is bytes, so "one\ntwo\nthree" is 13.
+--- source
+let s = "one
+two
+three";
+print len(s);
+print 1 / 0;
+--- expect
+13
+error: Value at line 5: divide by zero

@@ -1,0 +1,15 @@
+# 310: §4 / §6 `.36`. Unbounded recursion is a `Value` error naming the limit,
+# never a stack overflow. Depth is ACTIVE INVOCATIONS with the top level at 0 and
+# the check is `depth == 1000` at the call site, so invocations 1..1000 succeed
+# and the 1001st fails. The line is the failing CALL's line — 2, the recursive
+# call inside the body, not 5 where the top-level call is. Output printed before
+# the recursion is kept.
+--- source
+fn down(n) {
+  return down(n + 1);
+}
+print "go";
+print down(1);
+--- expect
+go
+error: Value at line 2: recursion limit of 1000 frames exceeded

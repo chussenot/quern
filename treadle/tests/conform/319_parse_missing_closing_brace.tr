@@ -1,0 +1,14 @@
+# 319: a missing `}`, so the parser runs out of input. The line is 4 because
+# `Eof` carries the line the LAST TOKEN ended on, not the counter's final value:
+# the `;` on line 4 is the last token, the file's trailing newline moves the
+# counter to 5, and an "end of input" error must not point at the blank line past
+# the program. Wording: error.rs `expected(line, want, found)` with each token
+# spelled by Display for TokenKind and quoted, and `Eof` spelled `end of input`,
+# unquoted because it is a description and not source text.
+--- source
+let x = 0;
+while x < 3 {
+  x = x + 1;
+print x;
+--- expect
+error: Parse at line 4: expected '}', found end of input

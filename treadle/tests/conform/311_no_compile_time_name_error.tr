@@ -1,0 +1,14 @@
+# 311: §6 `.35` — the compiler raises NO errors, so an unknown name is a runtime
+# error raised when execution REACHES it. Lines 1 and 2 print first and their
+# output is part of the result. An engine that resolved names statically would
+# produce an empty output plus this error, which is exactly the divergence this
+# case exists to catch; it is also what protects the partial-output rule, since
+# a static pass would delete prior output for every case in this file.
+--- source
+print 1;
+print 2;
+print nope();
+--- expect
+1
+2
+error: Name at line 3: undefined function 'nope'

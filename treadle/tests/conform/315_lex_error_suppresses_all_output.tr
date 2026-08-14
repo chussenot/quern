@@ -1,0 +1,12 @@
+# 315: the contrast case for the whole file. A Lex error happens before anything
+# runs, so line 1's `print` never executes and Output.lines is EMPTY — unlike
+# every runtime case here, where prior output is kept. Getting this wrong in the
+# other direction (keeping output) is as much a divergence as dropping it.
+# The line is 2, the line the literal OPENED on: the unterminated literal
+# swallows the rest of the file, and the newline inside it advances the counter
+# to 3, but 3 is not the line the reader must fix.
+--- source
+print "fine";
+print "oops;
+--- expect
+error: Lex at line 2: unterminated string

@@ -1,0 +1,15 @@
+# 308: line tracking through a comment, through a string that CONTAINS a comment
+# marker, and through a second comment. `// not a comment` is inside the literal
+# and must not end a line early; the two comment lines are not tokens but still
+# advance the counter. The failing `9 % 0` is on line 6.
+# len("x // not a comment\ny") == 20.
+--- source
+// a comment on line 1
+let s = "x // not a comment
+y";
+// a comment on line 4
+print len(s);
+print 9 % 0;
+--- expect
+20
+error: Value at line 6: modulo by zero

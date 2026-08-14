@@ -1,0 +1,14 @@
+# 312: the other half of §6 `.35`. An unreachable branch containing BOTH an
+# unknown function and a divide by zero must run clean — `compile` is infallible
+# for any Program the front end produced. There is no error line at all, and the
+# rendering is exactly the two print lines.
+--- source
+print "before";
+if false {
+  print nope();
+  print 1 / 0;
+}
+print "after";
+--- expect
+before
+after

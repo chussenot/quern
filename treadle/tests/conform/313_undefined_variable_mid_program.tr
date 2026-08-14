@@ -1,0 +1,12 @@
+# 313: a `Name` error at a Var node's line, mid-program, with prior output kept
+# and the following statement never reached. Distinct wording from a bad write
+# (`assignment to undefined variable`) and from a bad call (`undefined
+# function`).
+--- source
+let x = 1;
+print x;
+print y;
+print x;
+--- expect
+1
+error: Name at line 3: undefined variable 'y'

@@ -1,0 +1,10 @@
+# 316: an unknown escape reports the line the BACKSLASH is on (2), which for a
+# multi-line literal is NOT the line the literal started on (1). Both numbers are
+# defensible and the two engines share one lexer, so this pins which one the
+# corpus asserts. The message shows the escape as written: `\q`.
+--- source
+let s = "one
+two \q three";
+print s;
+--- expect
+error: Lex at line 2: unknown escape \q

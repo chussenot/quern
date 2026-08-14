@@ -1,0 +1,8 @@
+# 317: §2 — `return` outside a function is a PARSE error, not a runtime one, so
+# line 1's `print` never runs and there is no output. A tree-walker that only
+# discovered this on execution would print "1" first and diverge.
+--- source
+print 1;
+return 2;
+--- expect
+error: Parse at line 2: return outside of a function
