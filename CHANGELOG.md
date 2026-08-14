@@ -1,0 +1,152 @@
+# Changelog
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
+
+- - -
+## 0.1.0 - 2026-08-14
+#### Bug Fixes
+- **(corpus)** case 128 cited the superseded .39 wording; corpus now 131/131 on the tree engine - (0f50780) - Clement HUSSENOT-DESENONGES
+- **(error)** retire 'frames' from the recursion-limit message - (1e381e2) - Clement HUSSENOT-DESENONGES
+- **(exec)** reject an UPDATE that moves a row onto an existing PRIMARY KEY - (2efacfa) - Clement HUSSENOT-DESENONGES
+- **(front)** refuse a duplicate parameter name - (60bb66b) - Clement HUSSENOT-DESENONGES
+- **(front)** bound nesting and AST depth so no input aborts the process - (3263945) - Clement HUSSENOT-DESENONGES
+- **(harness)** flatten TAB and CR in the stderr field too - (33738f1) - Clement HUSSENOT-DESENONGES
+- **(harness)** stop tools/pw corrupting its own telemetry - (9a75b59) - Clement HUSSENOT-DESENONGES
+- **(plan)** resolve all three ORDER BY name forms of docs/quern.md §6 - (3f4077f) - Clement HUSSENOT-DESENONGES
+- **(storage)** ROLLBACK no longer undoes CREATE/DROP TABLE done inside the transaction - (ac95aeb) - Clement HUSSENOT-DESENONGES
+- **(vm)** give group A the same big-stack thread as group B - (a77ef2e) - Clement HUSSENOT-DESENONGES
+#### Documentation
+- **(audit)** correct my own /tmp inference per lexer, and audit bd_30-agents-1nn - (1dc3703) - Clement HUSSENOT-DESENONGES
+- **(audit)** pass 6 final — 168 claims, spec batch clean, orchestrator discipline improved - (9aa6e5d) - Clement HUSSENOT-DESENONGES
+- **(audit)** state at handoff — 110 claims, 5 false, backlog not empty - (5fecbed) - Clement HUSSENOT-DESENONGES
+- **(audit)** pass 5 — ast audits 13/13 clean, 110 claims total - (9f8bcfd) - Clement HUSSENOT-DESENONGES
+- **(audit)** pass 4 — 97 claims, and every false claim so far is an unmeasured number - (205ba0e) - Clement HUSSENOT-DESENONGES
+- **(audit)** pass 3 — 78 claims, 3 false incl. one of my own and the run-5 pattern recurring - (227592a) - Clement HUSSENOT-DESENONGES
+- **(audit)** pass 2 — 50 claims across token and value, 0 false - (be7bd3b) - Clement HUSSENOT-DESENONGES
+- **(audit)** measure all four gates at the run-6 baseline - (12e9bc4) - Clement HUSSENOT-DESENONGES
+- **(audit)** close-reason audit log — method, verdict scale, baseline pass - (680de29) - Clement HUSSENOT-DESENONGES
+- **(harness)** run-6 pact/bd instrumentation report — 875 records, zero unexplained failures - (102491a) - Clement HUSSENOT-DESENONGES
+- **(quern)** write the ORDER BY resolution rule that bead .49 was closed on - (bc0d608) - Clement HUSSENOT-DESENONGES
+- **(quern)** pin the seven semantics the corpus agents filed instead of guessing - (bae7ff6) - Clement HUSSENOT-DESENONGES
+- **(quern)** pin boolean NULL absorption and integer division semantics - (ef9ab1e) - Clement HUSSENOT-DESENONGES
+- **(quern)** pin the .slt format so the runner and five corpus beads agree - (c507226) - Clement HUSSENOT-DESENONGES
+- **(spec)** define AggExpr and correct the directive count in the grading section - (b25ed83) - Clement HUSSENOT-DESENONGES
+- **(treadle)** amend the as_bool line rule — Expr::Lit has no line, so name the fallback - (039bf16) - Clement HUSSENOT-DESENONGES
+- **(treadle)** pin the as_bool failure line to the failing operand - (3ba5311) - Clement HUSSENOT-DESENONGES
+- **(treadle)** pin left-associativity and grouping parens, and settle error wording on the landed value.rs - (25486ce) - Clement HUSSENOT-DESENONGES
+- **(treadle)** define UnOp/BinOp, pin the .tr comparison, add §6 pinned edges - (8e1b72c) - Clement HUSSENOT-DESENONGES
+- **(treadle)** pin = as a statement-only token, not an expression operator - (4c29e86) - Clement HUSSENOT-DESENONGES
+- raise pact finding 11 to P2 — cwd path resolution silently voided a real lease - (7023413) - Clement HUSSENOT-DESENONGES
+- pact and bd findings from two fleet runs, for later action - (cc3e778) - Clement HUSSENOT-DESENONGES
+- README with a captured REPL transcript, the SQL surface and the module layout - (8fc4e03) - Clement HUSSENOT-DESENONGES
+#### Features
+- **(ast)** frozen Expr/Stmt/FnDecl/Program plus the UnOp/BinOp enums - (9ebb052) - Clement HUSSENOT-DESENONGES
+- **(ast)** Statement, Expr, SelectStmt and AggExpr for the three parsers and the planner - (120a9e6) - Clement HUSSENOT-DESENONGES
+- **(catalog)** case-insensitive table map with a persistable byte encoding - (6fc3bb6) - Clement HUSSENOT-DESENONGES
+- **(cli)** run a program on either engine, or both as a hand oracle - (ac7007e) - Clement HUSSENOT-DESENONGES
+- **(error)** add MAX_DEPTH and internal(), per the newly pinned §6 edges - (6c9d0ac) - Clement HUSSENOT-DESENONGES
+- **(error)** frozen TreadleError taxonomy, corpus Display form and §4 message constructors - (c5be387) - Clement HUSSENOT-DESENONGES
+- **(exec)** two-phase INSERT, UPDATE and DELETE execution - (46125a4) - Clement HUSSENOT-DESENONGES
+- **(exec)** table scan operator materialising rows in its constructor - (44edea5) - Clement HUSSENOT-DESENONGES
+- **(exec)** GROUP BY with COUNT/SUM/MIN/MAX/AVG over a sorted group map - (9a6a5bc) - Clement HUSSENOT-DESENONGES
+- **(exec)** ORDER BY via a materialising stable sort on Value::sort_cmp - (7b1116d) - Clement HUSSENOT-DESENONGES
+- **(exec)** Project operator with an owned output schema - (03e9289) - Clement HUSSENOT-DESENONGES
+- **(exec)** inner nested-loop join over the concatenated row - (360bfd2) - Clement HUSSENOT-DESENONGES
+- **(exec)** LIMIT operator that stops pulling once satisfied - (98efc2e) - Clement HUSSENOT-DESENONGES
+- **(exec)** Filter operator keeping only Bool(true) predicate rows - (ba6b8c7) - Clement HUSSENOT-DESENONGES
+- **(exec)** the Operator trait and the expression evaluator - (6190c97) - Clement HUSSENOT-DESENONGES
+- **(front)** statement parser, hoisted fns and Program - (1425250) - Clement HUSSENOT-DESENONGES
+- **(front)** tokenize source to tokens with exact line tracking - (6f951fa) - Clement HUSSENOT-DESENONGES
+- **(front)** Token enum, case-sensitive keywords, line on every token - (a299a7f) - Clement HUSSENOT-DESENONGES
+- **(lexer)** Token enum, keyword table, and tokenizer - (bbf8687) - Clement HUSSENOT-DESENONGES
+- **(output)** the frozen observable, the Engine trait and a divergence diff - (1341409) - Clement HUSSENOT-DESENONGES
+- **(parser)** the cursor and the §2 expression precedence ladder - (258eb9b) - Clement HUSSENOT-DESENONGES
+- **(parser-query)** shared token cursor, expression parser and full SELECT - (57e7e3b) - Clement HUSSENOT-DESENONGES
+- **(plan)** the sql-to-rows entry point, and the REPL wired onto it - (eff687e) - Clement HUSSENOT-DESENONGES
+- **(plan)** physical operator tree with the one PK-lookup optimisation - (e3b5747) - Clement HUSSENOT-DESENONGES
+- **(plan)** LogicalPlan and the AST-to-logical lowering - (1c57952) - Clement HUSSENOT-DESENONGES
+- **(repl)** line loop, script mode, --db flag and the tab-separated output contract - (e5feb64) - Clement HUSSENOT-DESENONGES
+- **(sql)** parse INSERT, UPDATE, DELETE and txn control - (0a90d95) - Clement HUSSENOT-DESENONGES
+- **(sql)** parse CREATE TABLE and DROP TABLE into ast::Statement - (cec7ebe) - Clement HUSSENOT-DESENONGES
+- **(storage)** Db implementing Storage over pager, catalog, heap, btree and wal - (2a9c9e3) - Clement HUSSENOT-DESENONGES
+- **(storage)** land the frozen Storage trait from spec section 3 - (6ddf839) - Clement HUSSENOT-DESENONGES
+- **(storage)** slotted-page heap with validated row and slot decoding - (9e4b42e) - Clement HUSSENOT-DESENONGES
+- **(storage)** order-32 B+tree on INTEGER PRIMARY KEY over pager pages - (0f766ab) - Clement HUSSENOT-DESENONGES
+- **(storage)** file-backed 4096-byte pager with validated page-0 header - (9cff878) - Clement HUSSENOT-DESENONGES
+- **(tree)** statements, control flow, the recursion limit and the Engine impl - (ec18420) - Clement HUSSENOT-DESENONGES
+- **(tree)** evaluate expressions, short-circuit and/or, builtins - (78b5c24) - Clement HUSSENOT-DESENONGES
+- **(tree)** scope chain, shadowing, globals and the function namespace - (7fff82d) - Clement HUSSENOT-DESENONGES
+- **(txn)** single-writer transaction state machine with WAL-first commit - (40ac099) - Clement HUSSENOT-DESENONGES
+- **(types)** frozen Value/Type/Schema/QuernError contract with the NULL rule - (7edd476) - Clement HUSSENOT-DESENONGES
+- **(value)** frozen Value/Type/Display and the shared checked arithmetic helpers - (562464e) - Clement HUSSENOT-DESENONGES
+- **(vm)** compile statements, control flow and functions, and the Engine impl - (faed4e7) - Clement HUSSENOT-DESENONGES
+- **(vm)** calls, frames, Return, builtins and the recursion limit - (c724ee3) - Clement HUSSENOT-DESENONGES
+- **(vm)** compile expressions to bytecode - (119e0b3) - Clement HUSSENOT-DESENONGES
+- **(vm)** the stack machine core — dispatch, arithmetic, comparison, locals, globals - (42535a4) - Clement HUSSENOT-DESENONGES
+- **(vm)** instruction set, Chunk, and a per-instruction line table - (feecf5a) - Clement HUSSENOT-DESENONGES
+- **(wal)** append-only REDO log with commit-gated replay - (b5c0c06) - Clement HUSSENOT-DESENONGES
+#### Miscellaneous Chores
+- **(pact)** final checkpoint — both epics closed - (a1e9089) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — fuzzer widened, 6c limits differentially verified - (965c251) - Clement HUSSENOT-DESENONGES
+- **(pact)** triage the remaining beads — fixed, discharged, or transferred to the pact report - (58982dd) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — .67 closed - (edddeb2) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — audit closed, corrections hoisted onto their beads - (3f3049b) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — harness report delivered and its corrections accepted - (f86ed42) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — spec beads closed with per-bead §6 evidence - (c6f6736) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — CLI merged, all implementation beads closed - (2712460) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs — differential fuzzer merged - (6f7a172) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint — both engines at 131/131, zero divergences - (6634b34) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs — grader in place, awaiting engines - (2e08ecb) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs - (752833c) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs — full corpus landed, 131 cases - (08bd1fb) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs - (af36132) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs - (aeb4069) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs after the ast merge - (a2b1599) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs — master green after the error merge - (56a06bc) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs after the spec-adversary merge - (fae373d) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint run 6 logs - (fad3052) - Clement HUSSENOT-DESENONGES
+- **(pact)** final coordination log checkpoint — corpus 353/353 - (7e19cde) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs (corpus graded 348/353) - (cdef526) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs - (bfd5867) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs (all operators landed) - (996d7f8) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs (storage layer complete) - (ac98b94) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs after disk recovery - (2ed801c) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs (corpus complete) - (b7c4b59) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs - (346ef25) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs (11 agents in flight) - (a4a1d8e) - Clement HUSSENOT-DESENONGES
+- **(pact)** checkpoint coordination logs through wave 1a - (3fa383c) - Clement HUSSENOT-DESENONGES
+- **(pact)** sync the coordination protocol block - (18dcd9d) - Clement HUSSENOT-DESENONGES
+- **(pact)** sync the coordination protocol block - (d43b92c) - Clement HUSSENOT-DESENONGES
+- **(quern)** spec, build skeleton, and pact native-store gitignore fix - (8594c9f) - Clement HUSSENOT-DESENONGES
+- **(treadle)** run 6 baseline — spec, crate skeleton, harness instrumentation - (a582a5d) - Clement HUSSENOT-DESENONGES
+- ignore run 6 worktrees - (962e171) - Clement HUSSENOT-DESENONGES
+- Add the interactions - (5062f7d) - Clement HUSSENOT-DESENONGES
+- stop tracking target/ - (c60a475) - Clement HUSSENOT-DESENONGES
+- Root commit - (89ab62f) - Clement HUSSENOT-DESENONGES
+#### Refactoring
+- **(front)** build Lex errors through error.rs constructors - (fd8f11e) - Clement HUSSENOT-DESENONGES
+- **(storage)** Db delegates transactions to txn::TxnHost - (a376bbe) - Clement HUSSENOT-DESENONGES
+#### Tests
+- **(conform)** register the vm engine and enable the corpus run - (cf7afaa) - Clement HUSSENOT-DESENONGES
+- **(conform)** the §5 conformance runner over every engine - (d308b95) - Clement HUSSENOT-DESENONGES
+- **(conform)** 33 cases for functions, recursion, arity and the depth limit - (bcafd43) - Clement HUSSENOT-DESENONGES
+- **(conform)** 40 spec-derived 0xx cases for literals, arithmetic and print - (b1eebc2) - Clement HUSSENOT-DESENONGES
+- **(conform)** 22 cases for the partial-output rule and exact error lines - (28cdd18) - Clement HUSSENOT-DESENONGES
+- **(conform)** control flow, short-circuit, scoping and precedence corpus - (fcda080) - Clement HUSSENOT-DESENONGES
+- **(corpus)** move 070/080 case comments to '#' lines outside the blocks - (af7c69f) - Clement HUSSENOT-DESENONGES
+- **(corpus)** inner JOIN and GROUP BY .slt cases - (4d3784a) - Clement HUSSENOT-DESENONGES
+- **(corpus)** DDL and INSERT .slt cases - (d8e8ca6) - Clement HUSSENOT-DESENONGES
+- **(corpus)** ORDER BY and LIMIT .slt cases (070, 080) - (46eb89a) - Clement HUSSENOT-DESENONGES
+- **(corpus)** transaction, UPDATE and DELETE .slt cases - (2012064) - Clement HUSSENOT-DESENONGES
+- **(corpus)** SELECT projection, expression and WHERE cases - (4968637) - Clement HUSSENOT-DESENONGES
+- **(differential)** generate the shapes the recursive grammar cannot - (feb5ca0) - Clement HUSSENOT-DESENONGES
+- **(differential)** seeded differential fuzzer over both engines - (38e670a) - Clement HUSSENOT-DESENONGES
+- **(error)** pin the §6 i64::MIN edges and the zero-divisor precedence - (a352dd0) - Clement HUSSENOT-DESENONGES
+- **(logic)** the .slt harness that grades the corpus - (f5e9ec1) - Clement HUSSENOT-DESENONGES
+- **(plan)** replace the assertion of the pre-section-6 ORDER BY rule - (77c29dc) - Clement HUSSENOT-DESENONGES
+- **(recovery)** un-ignore the two kill -9 tests now that the planner is wired - (b66bd23) - Clement HUSSENOT-DESENONGES
+- **(recovery)** kill -9 crash-recovery test against the quern binary - (5743bc8) - Clement HUSSENOT-DESENONGES
+- **(vm)** pin the and/or jump shape in the machine — short-circuit and rhs typing - (6c1b0e8) - Clement HUSSENOT-DESENONGES
+
+- - -
+
+Changelog generated by [cocogitto](https://github.com/cocogitto/cocogitto).
