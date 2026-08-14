@@ -28,3 +28,5 @@
 {"at":"2026-08-14T08:09:42Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.24","secs":0.361,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:09:42Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.25","secs":0.362,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:09:43Z","agent":"spec-adversary","tool":"bd","argv":"bd show bd_30-agents-2jk.26","secs":0.365,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:15:19Z","agent":"spec-adversary","tool":"pact","argv":"pact lease acquire docs/treadle.md --note spec-adversary: adding the two missing frozen definitions (UnOp/BinOp) and a pinned-edges section; no semantics changed silently","secs":0.033,"exit":0,"stderr":"warning: your copy of docs/treadle.md is NOT the copy orchestrator left when they released it at 2026-08-14T08:14:11.140924477+00:00 — a lease is exclusive in time, not across worktrees, so you may "}
+{"at":"2026-08-14T08:15:19Z","agent":"spec-adversary","tool":"bd","argv":"bd create --help","secs":0.078,"exit":0,"stderr":""}

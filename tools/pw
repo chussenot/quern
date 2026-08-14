@@ -30,8 +30,22 @@ dur=$(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.3f", b-a}')
 tail_err=$(head -c 200 "$err" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
 rm -f "$err"
 
-cmd=$(printf '%s ' "$@" | sed 's/\\/\\\\/g; s/"/\\"/g; s/ $//')
-printf '{"at":"%s","agent":"%s","tool":"%s","argv":"%s","secs":%s,"exit":%s,"stderr":"%s"}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$AGENT" "$1" "$cmd" "$dur" "$rc" "$tail_err" >> "$LOG"
+# 141 = 128+SIGPIPE: the command was killed because the CALLER stopped reading
+# (`... | head`), not because it failed. Recording that as a failure would have
+# the harness report claim bd/pact fell over when they did not — it showed up
+# three times in the first wave. Flag it so the analysis can exclude it, and
+# keep the raw code so nothing is hidden.
+sigpipe=false
+[ "$rc" = 141 ] && sigpipe=true
+
+# argv must be flattened to ONE line: a --reason or --note containing newlines
+# (they routinely do) would otherwise split one record across many lines and the
+# log would no longer be one-JSON-object-per-line. This is the same torn-line
+# failure the previous run went looking for in pact's own store; the wrapper had
+# it, and 11 of the first 141 records were unparseable before this was fixed.
+# Truncated to 400 chars because a full close reason is prose, not telemetry.
+cmd=$(printf '%s ' "$@" | tr '\n\r\t' '   ' | head -c 400 | sed 's/\\/\\\\/g; s/"/\\"/g; s/ *$//')
+printf '{"at":"%s","agent":"%s","tool":"%s","argv":"%s","secs":%s,"exit":%s,"sigpipe":%s,"stderr":"%s"}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$AGENT" "$1" "$cmd" "$dur" "$rc" "$sigpipe" "$tail_err" >> "$LOG"
 
 exit $rc

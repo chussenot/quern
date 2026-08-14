@@ -3,3 +3,7 @@
 {"at":"2026-08-14T08:01:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:09:06Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"stderr":""}
 {"at":"2026-08-14T08:13:48Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire docs/treadle.md --note token found = missing from the lexical surface; pinning it as a statement-only token --ttl 900","secs":0.041,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:14:11Z","agent":"orchestrator","tool":"pact","argv":"pact lease release docs/treadle.md","secs":0.022,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:18:56Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.013,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.038,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:20Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls --json","secs":0.059,"exit":0,"stderr":""}

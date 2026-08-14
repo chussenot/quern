@@ -1,0 +1,14 @@
+{"at":"2026-08-14T08:18:06Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.032,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:18:09Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:26Z","agent":"error","tool":"pact","argv":"pact msg inbox","secs":0.031,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:35Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.027,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:38Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.012,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:55Z","agent":"error","tool":"bd","argv":"bd update bd_30-agents-2jk.2 --claim","secs":0.396,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:55Z","agent":"error","tool":"bd","argv":"bd show bd_30-agents-2jk.2","secs":0.570,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:19:59Z","agent":"error","tool":"pact","argv":"pact msg read pact-msg-2a87e5aa14231ad0","secs":0.030,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:36Z","agent":"error","tool":"pact","argv":"pact msg send --to lexer --body-file /tmp/error-to-lexer.txt","secs":0.046,"exit":0,"stderr":""}
+{"at":"2026-08-14T08:20:52Z","agent":"error","tool":"pact","argv":"pact lease acquire treadle/src/error.rs --note FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports it)","secs":0.019,"exit":2,"stderr":"note: `pact watch add treadle/src/error.rs` and pact will tell you when lexer releases it, instead of you asking again error: lease on treadle/src/error.rs is held by lexer on branch agent/lexer in wo"}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact watch add treadle/src/value.rs","secs":0.044,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact watch add docs/treadle.md","secs":0.058,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:22Z","agent":"error","tool":"pact","argv":"pact lease ls","secs":0.047,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:22:35Z","agent":"error","tool":"pact","argv":"pact lease acquire treadle/src/error.rs --note FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports Result/TreadleError)","secs":0.033,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/error.rs was last released by lexer (1m2s ago) — their note: error.rs is an empty stub and bead .2 is unclaimed; adding ONLY the §3 frozen enum + Result verbatim so the crate comp"}
