@@ -499,18 +499,31 @@ in writing, and summary lines are never read without their detail lines.
 An auditor that will not file against itself has no standing to file against
 anyone, so `.52` is P1, the same as `.53`.
 
-### The harness mystery, solved by spec-adversary — and the brief is wrong
+### The harness mystery — the brief's REMEDY was right and its DIAGNOSTIC was wrong
+
+> **Corrected in pass 6**, after `lexer` replied (`pact-msg-853147d4577f6bfa`)
+> pointing out that my first write-up here overstated this. I originally wrote
+> "the brief is wrong for run 6" and said `/tmp` was *not* the cause. That is
+> half wrong: `/tmp` **is** the cause. What the brief gets wrong is the
+> *diagnostic* it sends you to, not the conclusion. Both `lexer` and I measured
+> free space, found plenty, and drew the same wrong inference from it — a true
+> reading of the wrong number. Corrected below rather than edited away, because
+> the wrong inference is the interesting part.
 
 Three of us independently hit "every Bash command that produces output fails with
 a bare exit 1 and no output, `echo` included". The brief says: *"`/tmp` filled and
 every shell command then failed with a bare `exit 1`… If that happens to you,
 that is the cause, not a broken harness."*
 
-**The brief is wrong for run 6, and free space is exactly what misleads you.**
-spec-adversary found the real cause: `/tmp` is tmpfs mounted with **`usrquota`**
-and uid 1000 is at its quota, while `df` still reports 6.8G free and 94% of
-inodes free. Tool file writes fail `EDQUOT`. I confirmed the mount option
-myself:
+**The brief's remedy is right — `/tmp` is the problem — but its diagnostic is
+unusable, because the failure is invisible to `df`.** spec-adversary found the
+mechanism: `/tmp` is tmpfs mounted with **`usrquota`** and uid 1000 is at its
+**per-uid quota**. `df` reports the filesystem's totals, not your quota, so
+"6.8G avail of 14G, 50% used" is true and irrelevant; `df -i` will not show it
+either. Tool file writes fail `EDQUOT`. That also explains why the symptom is
+*selective* in the way all three of us saw it: a command that produces output
+needs a temp file it cannot create and dies with a bare exit 1, while a command
+producing none exits 0. I confirmed the mount option myself:
 
 ```
 tmpfs on /tmp type tmpfs (rw,nosuid,nodev,nr_inodes=1048576,inode64,usrquota)
@@ -523,8 +536,10 @@ agent can free it.
 Cost: ~8 minutes (spec-adversary), ~4 (lexer), ~2 (me). Only spec-adversary
 looked at the mount options; lexer called it "output-capture flake" and **I
 blamed a shell alias**. The two wrong diagnoses were both consistent with
-`df`, which is the trap. Worth an amended brief line, since the current one
-sends everyone to `df`.
+`df`, which is the trap. The right brief line is not "check whether /tmp is
+full" but **`export TMPDIR=$HOME/.tmpx` at startup** — a prophylactic, not a
+diagnosis, because the diagnosis costs three agents ten minutes each and the
+export costs nothing. `lexer` has run under it since with no recurrence.
 
 ### Orchestrator, pass 3 — summarised plainly
 
@@ -905,3 +920,21 @@ checkout, a `df` alias, doc comments that mention `format!`, and a `20_000`
 numeric separator). All four were caught by looking at the actual lines instead
 of trusting a grep. The fidelity check I adopted after the first one is the
 single most valuable thing in this file.
+
+### Pass 6 addendum — `bd_30-agents-1nn` (lexer's follow-up) · 5 claims · 5 VERIFIED
+
+Audited because lexer volunteered it. Commit `fd8f11e`, trailer
+`Pact-Agent: lexer`, `+62/-40` to `lexer.rs` only. "All four Lex sites now go
+through error.rs constructors and my local `lex_err` helper is deleted" —
+`grep -rn 'lex_err' treadle/src/` returns **nothing**. "The gates ran in the real
+worktree this time: 38 passed, 13 mine" — consistent with the master suite I ran.
+
+And it reported a defect class worth more than the fix: the escape test that
+should have caught the embedded-newline bug asserted only
+`contains("unknown escape")` and **passed either way**. `grep -c 'contains('
+treadle/src/front/lexer.rs` is now **0** — every Lex assertion compares full
+message text. Its own phrasing is the right summary and I am keeping it here:
+*a test that cannot fail is a false green with better manners.* That is the
+`.56` pattern in test form — an assertion that looks measured and is not — and
+it is the one thing in this run that an auditor checking close reasons would
+never have caught, because the close reason was true and the test was the liar.
