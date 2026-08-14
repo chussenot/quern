@@ -642,3 +642,37 @@ remains UNVERIFIABLE and is worth resolving, because the two possible
 explanations — a misremembered exit code, or bd calls made outside `tools/pw` —
 have very different implications for the harness data, and one of them is the
 brief's "hole in the data".
+
+---
+
+## Pass 5 — 2026-08-14, `bd_30-agents-2jk.10` (ast)
+
+**Running totals: 110 claims checked — 102 VERIFIED, 3 UNVERIFIABLE, 5 FALSE.**
+
+### `bd_30-agents-2jk.10` — ast · 13 claims · 13 VERIFIED, 0 FALSE
+
+The cleanest close of the run, and the one that shows the `.56` pattern is a
+habit and not an inevitability: **every number in it is right**, including the
+incidental ones.
+
+| Claim | Measured | Verdict |
+|---|---|---|
+| "commit `9ebb052`, trailer `Pact-Agent=ast`", branch `agent/ast-r6` | all three confirmed; 410 insertions, `ast.rs` only | VERIFIED |
+| "`wt6/ast` did not exist and `agent/ast` was already checked out by an earlier run's `wt/ast`, so I created `agent/ast-r6` from master — the merger needs to know that" | `agent/ast` is held by the run-5 worktree `wt/ast`; `9ebb052` is on `agent/ast-r6`, now also merged to master | VERIFIED |
+| "FROZEN §3 VERBATIM: Expr, Stmt, FnDecl, Program, all Debug+Clone" | matches `docs/treadle.md:138-156` | VERIFIED |
+| "UnOp{Neg,Not} and BinOp{Or,And,Eq,Ne,Lt,Gt,Le,Ge,Add,Sub,Mul,Div,Rem}, Debug+Clone+Copy+PartialEq+Eq" | `ast.rs:19-20` and `:36-37`, derives exact, 13 BinOps | VERIFIED |
+| "ast.rs imports only `crate::value::Value` and nothing from error.rs" | its only `use` lines are `std::rc::Rc` and `crate::value::Value` | VERIFIED |
+| **"build and clippy FAIL, with exactly two errors, both E0432 … in `src/value.rs:17` and `src/front/lexer.rs:29`"** | reproduced: **exactly 2** `error[E0432]`, at `src/value.rs:17:20` and `src/front/lexer.rs:29:20`. Line numbers exact | VERIFIED |
+| "4 of my tests PASS by name … (38 other tests filtered out)" | reproducing its method (real `error.rs` dropped into a scratch copy): all four named tests pass, and the suite totals **42** — so 42 − 4 = **38 filtered**, exactly as stated | VERIFIED |
+| "clippy `--all-targets -- -D warnings` CLEAN" | exit 0 | VERIFIED |
+| "MESSAGED all 9 dependents … in one thread `pact-msg-6156f17f938c5787`" | that id, `from: ast`, exactly those 9 recipients, one thread | VERIFIED |
+
+Two things worth copying from this reason. It reported a **failing** in-tree
+build as a failure, with the exact error count and line numbers, and separately
+described the honest scratch-copy gate — so nothing had to be taken on trust and
+nothing was dressed up. And its one genuinely load-bearing design decision (that
+`Program.fns` is the complete hoisted list and `Stmt::Fn` is a run-time no-op,
+because otherwise a `fn` inside a never-taken branch is defined in one engine and
+not the other) is documented in the code *and* in the outgoing message, not only
+in the close reason — which is the difference between a decision that survives
+and one that has to be rediscovered.
