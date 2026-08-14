@@ -39,3 +39,8 @@
 {"at":"2026-08-14T08:48:12Z","agent":"conform-fns","tool":"pact","argv":"pact msg inbox --watch-only","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:48:22Z","agent":"conform-fns","tool":"pact","argv":"pact msg read pact-msg-9593ad0e3c1e5f27","secs":0.043,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:48:37Z","agent":"conform-fns","tool":"pact","argv":"pact msg read pact-msg-14072cbecf64f6e7","secs":0.050,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:51:42Z","agent":"conform-fns","tool":"pact","argv":"pact msg inbox","secs":0.034,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:51:42Z","agent":"conform-fns","tool":"pact","argv":"pact lease release --all","secs":0.032,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:37Z","agent":"conform-fns","tool":"bd","argv":"bd close bd_30-agents-2jk.24 --reason=33 cases in treadle/tests/conform/2*.tr (bead asked for >=20), committed as bcafd43 on agent/conform-fns, rebased onto master (a5bf3dd). Test DATA only, no Rust. Every expectation derived from docs/treadle.md; no engine existed.  COVERAGE, against each item the bead named: declaration and call (201); a call BEFORE the declaration (202) and mutual recursion wit","secs":0.513,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:37Z","agent":"conform-fns","tool":"bd","argv":"bd show bd_30-agents-2jk.24","secs":0.228,"exit":141,"sigpipe":true,"stderr":""}
+{"at":"2026-08-14T08:52:47Z","agent":"conform-fns","tool":"pact","argv":"pact lease ls","secs":0.017,"exit":0,"sigpipe":false,"stderr":""}

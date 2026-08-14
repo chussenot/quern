@@ -1,0 +1,20 @@
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease acquire treadle/src/value.rs --note pathtest A --ttl 60","secs":0.037,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/value.rs was last released by value (37m15s ago) — their note: FROZEN §3: Value/Type/Display, type_of/type_name, checked arithmetic helpers both engines call. `pact log` has the h"}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.029,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:58Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease acquire src/value.rs --note A --ttl 60","secs":0.048,"exit":0,"sigpipe":false,"stderr":"note: no unread messages about src/value.rs, but 1 watch notice(s) — `pact msg inbox --watch-only` shows what changed under you "}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.018,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease acquire treadle/src/value.rs --note B --ttl 60","secs":0.035,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:12Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.026,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:40Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.024,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:40Z","agent":"pathtest","tool":"pact","argv":"pact lease acquire treadle/src/value.rs treadle/src/error.rs treadle/src/output.rs --note multi --ttl 60","secs":0.094,"exit":0,"sigpipe":false,"stderr":"note: treadle/src/error.rs was last released by error (17m26s ago) — their note: FROZEN §3 taxonomy + §4 constructors; bead bd_30-agents-2jk.2; unblocks master build (value.rs imports Result/Tread"}
+{"at":"2026-08-14T08:53:40Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.018,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:41Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.039,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:41Z","agent":"pathtest","tool":"pact","argv":"pact lease acquire treadle/src/value.rs treadle/src/error.rs --note zsh trap --ttl 60","secs":0.034,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:41Z","agent":"pathtest","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:41Z","agent":"pathtest","tool":"pact","argv":"pact lease release --all","secs":0.019,"exit":0,"sigpipe":false,"stderr":""}

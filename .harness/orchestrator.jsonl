@@ -16,3 +16,4 @@
 {"at":"2026-08-14T08:45:58Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire docs/treadle.md --note resolving .54 associativity/parens and .55 error wording; parser-expr is live and .54 binds it --ttl 900","secs":0.030,"exit":0,"sigpipe":false,"stderr":"note: docs/treadle.md was last released by spec-adversary (17m11s ago) — their note: spec-adversary: adding the two missing frozen definitions (UnOp/BinOp) and a pinned-edges section; no semantics c"}
 {"at":"2026-08-14T08:46:43Z","agent":"orchestrator","tool":"pact","argv":"pact lease release docs/treadle.md","secs":0.057,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:48:05Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.016,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:51:22Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}

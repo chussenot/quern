@@ -1,0 +1,17 @@
+{"at":"2026-08-14T08:52:35Z","agent":"conform-runner","tool":"pact","argv":"pact msg inbox","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:47Z","agent":"conform-runner","tool":"pact","argv":"pact msg read pact-msg-c5112b2d1ff3ffdf","secs":0.040,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:47Z","agent":"conform-runner","tool":"pact","argv":"pact msg read pact-msg-5963d026bb55eeb1","secs":0.046,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:03Z","agent":"conform-runner","tool":"bd","argv":"bd update bd_30-agents-2jk.21 --claim","secs":0.345,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:04Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.21","secs":0.315,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact lease acquire treadle/tests/conform.rs --note writing the conformance runner (bd .21): .tr parser + byte-exact canonical-rendering comparison over both engines","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact watch add treadle/src/output.rs","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact watch add treadle/src/engine.rs","secs":0.014,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact watch add treadle/src/lib.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact watch add treadle/src/error.rs","secs":0.013,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:53:14Z","agent":"conform-runner","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:54:40Z","agent":"conform-runner","tool":"bd","argv":"bd list","secs":0.396,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:54:49Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.16","secs":0.361,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:54:49Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.17","secs":0.329,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:54:50Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.20","secs":0.338,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:54:59Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.17","secs":0.340,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:55:00Z","agent":"conform-runner","tool":"bd","argv":"bd show bd_30-agents-2jk.20","secs":0.339,"exit":0,"sigpipe":false,"stderr":""}

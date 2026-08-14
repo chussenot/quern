@@ -1,0 +1,2 @@
+{"at":"2026-08-14T08:55:49Z","agent":"parser-stmt","tool":"pact","argv":"pact msg inbox","secs":0.041,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:55:49Z","agent":"parser-stmt","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}

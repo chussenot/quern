@@ -31,3 +31,6 @@
 {"at":"2026-08-14T08:51:03Z","agent":"parser-expr","tool":"pact","argv":"pact msg read pact-msg-f3cc278deb362664","secs":0.055,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:51:03Z","agent":"parser-expr","tool":"pact","argv":"pact msg inbox","secs":0.033,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T08:51:03Z","agent":"parser-expr","tool":"pact","argv":"pact msg sent","secs":0.046,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:51:12Z","agent":"parser-expr","tool":"pact","argv":"pact lease release --all","secs":0.026,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:51:51Z","agent":"parser-expr","tool":"bd","argv":"bd close bd_30-agents-2jk.11 --reason=EXPRESSION half of treadle/src/front/parser.rs landed on branch agent/parser-expr, commit 258eb9b (612 lines, the only file I touched).  BUILT: one pub(crate) Cursor over Vec<Token> — new/peek/advance/at_end/eat/expect/ident/expected, named advance not next per token's clippy::should_implement_trait warning — plus pub(crate) parse_expr and a pub(crate) des","secs":0.470,"exit":0,"sigpipe":false,"stderr":""}
+{"at":"2026-08-14T08:52:01Z","agent":"parser-expr","tool":"bd","argv":"bd show bd_30-agents-2jk.11","secs":0.215,"exit":141,"sigpipe":true,"stderr":""}
