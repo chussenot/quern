@@ -27,3 +27,4 @@
 {"at":"2026-08-14T09:20:42Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.012,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T09:23:08Z","agent":"orchestrator","tool":"pact","argv":"pact lease ls","secs":0.015,"exit":0,"sigpipe":false,"stderr":""}
 {"at":"2026-08-14T09:30:47Z","agent":"orchestrator","tool":"pact","argv":"pact lease acquire treadle/tests/conform/128_assign_unbound_is_name_error.tr docs/treadle.md --note bead .71: case 128 cites the superseded .39 wording; plus my §6b example contradicts its own fallback --ttl 600","secs":0.066,"exit":0,"sigpipe":false,"stderr":"note: no unread messages about docs/treadle.md, but 1 watch notice(s) — `pact msg inbox --watch-only` shows what changed under you "}
+{"at":"2026-08-14T09:31:17Z","agent":"orchestrator","tool":"pact","argv":"pact lease release treadle/tests/conform/128_assign_unbound_is_name_error.tr docs/treadle.md","secs":0.072,"exit":0,"sigpipe":false,"stderr":""}
