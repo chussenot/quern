@@ -46,17 +46,21 @@ use treadle::output::{diff, Output};
 /// Every engine the corpus is graded against.
 ///
 /// **Adding an engine is one line here and nothing else in this file changes.**
-/// Neither engine exists yet (`src/vm/machine.rs` and `src/tree/eval.rs` are
-/// stubs, and nothing in the crate implements [`Engine`]), so the list is empty
-/// and [`every_case_against_every_engine`] is `#[ignore]`d — see the reason on
-/// that test. It also asserts the list is non-empty, so an empty `engines()` can
-/// never masquerade as a green run over zero engines.
+/// [`every_case_against_every_engine`] also asserts the list is non-empty, so an
+/// empty `engines()` can never masquerade as a green run over zero engines.
+///
+/// The tree engine (bd `.19`/`.20`) is in; the VM's line is still commented
+/// because `Op::Call` was a stub when it landed (bd `.16`/`.17`).
+// `-D warnings` turns `clippy::vec_init_then_push` into an error while the list
+// holds exactly ONE engine. Allowed rather than rewritten to `vec![]`, so that
+// adding the second engine stays the one-line change described above; the lint
+// spans the whole `let` + `push`, so the attribute has to sit on the function.
+#[allow(clippy::vec_init_then_push)]
 fn engines() -> Vec<Box<dyn Engine>> {
-    #[allow(unused_mut)]
     let mut engines: Vec<Box<dyn Engine>> = Vec::new();
     // Uncomment one line per engine as it lands, and drop the `#[ignore]`:
     // engines.push(Box::new(treadle::vm::machine::Vm::new())); // bd .16 / .17
-    // engines.push(Box::new(treadle::tree::eval::Interp::new())); // bd .19 / .20
+    engines.push(Box::new(treadle::tree::eval::Eval::new())); // bd .19 / .20
     engines
 }
 
@@ -376,11 +380,6 @@ fn grade(path: &Path, case: &Case, engines: &mut [Box<dyn Engine>]) -> Graded {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "no type implements treadle::engine::Engine yet (src/vm/machine.rs and \
-            src/tree/eval.rs are stubs): blocked on bd_30-agents-2jk.16/.17 (vm) and \
-            bd_30-agents-2jk.19/.20 (tree). Add the engine to engines() and delete \
-            this attribute; nothing else in this file changes. The grading itself \
-            is already exercised by the fake-engine tests below."]
 fn every_case_against_every_engine() {
     let cases = load_corpus();
     let mut engines = engines();

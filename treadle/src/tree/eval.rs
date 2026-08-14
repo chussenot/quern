@@ -8,8 +8,8 @@
 //! `.19` (eval-expr) owns **expressions**: [`Eval::eval`] and everything it
 //! reaches. `.20` (eval-stmt) owns **statements**, control flow, function-body
 //! execution and the `Engine` impl. The seam between them is
-//! [`Eval::exec_body`] — see its doc comment, which describes what is
-//! deliberately temporary there.
+//! [`Eval::exec_body`]: `.19` left a deliberately temporary version that raised
+//! `internal` for every statement it did not need, and `.20` replaced it whole.
 //!
 //! # Why almost nothing is decided here
 //!
@@ -107,7 +107,10 @@ impl Eval {
                 // §6/`.40`: the LEFT operand must be Bool. The right is
                 // type-checked only if it is evaluated, so `false and 1` is
                 // `false` and `true or nil` is `true`.
-                let left = l.as_bool(line)?;
+                //
+                // §6b: the line is the FAILING OPERAND's, not this node's — see
+                // `line_of`, including the one fallback a literal needs.
+                let left = l.as_bool(line_of(lhs, line))?;
                 let decided = match op {
                     BinOp::And => !left,
                     _ => left,
@@ -116,7 +119,7 @@ impl Eval {
                     return Ok(Value::Bool(left));
                 }
                 let r = self.eval(rhs, env, out)?;
-                Ok(Value::Bool(r.as_bool(line)?))
+                Ok(Value::Bool(r.as_bool(line_of(rhs, line))?))
             }
             _ => {
                 let r = self.eval(rhs, env, out)?;
@@ -208,20 +211,22 @@ impl Eval {
         returned.map(|v| v.unwrap_or(Value::Nil))
     }
 
-    /// Execute a statement list, yielding `Some(v)` if it returned.
+    /// Execute a statement list, yielding `Some(v)` if it executed a `return`.
     ///
-    /// **This is the seam, and bead `.20` (eval-stmt) owns the real version.**
-    /// What is here executes only `print`, `return` and the no-op `fn`, which
-    /// is the minimum that makes the expression-half tests below assert
-    /// anything real: short-circuiting and argument order are only observable
-    /// through a callee with a side effect, so without a callee that can
-    /// `print` there is nothing to assert. Every other statement raises
-    /// `internal` (§6/`.45`) rather than being silently skipped — a skipped
-    /// `let` would make a half-built engine look green, while `internal error:`
-    /// is greppable in CI and can never be mistaken for a language error.
+    /// **`Option` is the control-flow signal, deliberately not an `Err`.** A
+    /// `return` is not a failure, and §4 makes every `Err` an `Output.error`, so
+    /// a `return` smuggled through the error channel would either surface as a
+    /// bogus error or force every intermediate caller to sort real errors from
+    /// fake ones — one missed check and `fn f() { return 1; }` reports a runtime
+    /// error. `Result<Option<Value>>` makes the two channels different types, so
+    /// mixing them does not compile.
     ///
-    /// `.20` replaces this whole function; it should not try to keep the two
-    /// arms below.
+    /// The propagation is by early exit: the loop stops at the first `Some`, and
+    /// every construct that owns a nested list ([`Eval::block`], the `while`
+    /// loop) hands one straight up. That is what makes §2's "`return` leaves the
+    /// function outright" true through any depth of `if`/`while` bodies, with no
+    /// per-block bookkeeping — [`Eval::invoke`]'s `pop_frame` discards every
+    /// scope the body pushed however deep, so nothing has to be unwound here.
     fn exec_body(
         &mut self,
         body: &[Stmt],
@@ -229,36 +234,224 @@ impl Eval {
         out: &mut Output,
     ) -> Result<Option<Value>> {
         for s in body {
-            match s {
-                Stmt::Print { args, .. } => {
-                    // §6/`.33`: arguments left to right, and the line is
-                    // appended only once every one of them succeeded — hence a
-                    // slice of finished values and no partial line.
-                    let mut vals = Vec::with_capacity(args.len());
-                    for a in args {
-                        vals.push(self.eval(a, env, out)?);
-                    }
-                    out.print(&vals);
-                }
-                Stmt::Return { value, .. } => {
-                    let v = match value {
-                        Some(e) => self.eval(e, env, out)?,
-                        None => Value::Nil,
-                    };
-                    return Ok(Some(v));
-                }
-                // A declaration is not a runtime action: it is defined from
-                // `Program::fns` before the first statement (see `ast.rs`).
-                Stmt::Fn(_) => {}
-                Stmt::Let { line, .. }
-                | Stmt::Assign { line, .. }
-                | Stmt::If { line, .. }
-                | Stmt::While { line, .. } => {
-                    return Err(TreadleError::internal(*line, "statement half is bead .20"));
-                }
+            if let Some(v) = self.exec(s, env, out)? {
+                return Ok(Some(v));
             }
         }
         Ok(None)
+    }
+
+    /// One statement. `Some(v)` means it — or something nested inside it —
+    /// executed a `return`.
+    fn exec(&mut self, s: &Stmt, env: &mut Env, out: &mut Output) -> Result<Option<Value>> {
+        match s {
+            // §6/`.37`: the initialiser is evaluated in the scope as it exists
+            // BEFORE the binding, which `env::define` makes the only
+            // expressible order (it takes a `Value`, not an `&Expr`).
+            Stmt::Let { name, init, .. } => {
+                let v = self.eval(init, env, out)?;
+                env.define(name, v);
+                Ok(None)
+            }
+            // Assignment walks outward to the nearest existing binding and is a
+            // `Name` error if there is none — all of that is `env::assign`'s.
+            // The failing node is the statement itself (§6/`.46`): a target
+            // name carries no line of its own.
+            Stmt::Assign { name, value, line } => {
+                let v = self.eval(value, env, out)?;
+                env.assign(name, v, *line)?;
+                Ok(None)
+            }
+            Stmt::Print { args, .. } => {
+                // §6/`.33`: arguments left to right, and the line is appended
+                // only once every one of them succeeded — hence a slice of
+                // finished values and no partial line.
+                let mut vals = Vec::with_capacity(args.len());
+                for a in args {
+                    vals.push(self.eval(a, env, out)?);
+                }
+                out.print(&vals);
+                Ok(None)
+            }
+            // An `else`-less `if` is `els: []` (see `ast.rs`), so the untaken
+            // branch of one costs an empty scope and no special case.
+            Stmt::If {
+                cond,
+                then,
+                els,
+                line,
+            } => {
+                let branch = if self.condition(cond, *line, env, out)? {
+                    then
+                } else {
+                    els
+                };
+                self.block(branch, env, out)
+            }
+            // The condition is re-evaluated before every iteration, including
+            // the first, so a `while` whose condition is false at entry runs
+            // zero times and a condition that stops being `Bool` mid-loop
+            // fails then (corpus `322`). §6/`.43`: no step or time limit —
+            // an unbounded loop is allowed to run forever.
+            Stmt::While { cond, body, line } => {
+                while self.condition(cond, *line, env, out)? {
+                    if let Some(v) = self.block(body, env, out)? {
+                        return Ok(Some(v));
+                    }
+                }
+                Ok(None)
+            }
+            // §2: `return;` yields `Nil` and still stops the body, which is why
+            // this is `Some(Nil)` and never `None` (corpus `209`).
+            Stmt::Return { value, .. } => {
+                let v = match value {
+                    Some(e) => self.eval(e, env, out)?,
+                    None => Value::Nil,
+                };
+                Ok(Some(v))
+            }
+            // A declaration is not a runtime action: it is defined from
+            // `Program::fns` before the first statement (see `ast.rs`).
+            Stmt::Fn(_) => Ok(None),
+        }
+    }
+
+    /// An `if`/`else`/`while` **body**, which §2 makes a scope.
+    ///
+    /// Not a `push_frame`: a block sees its enclosing scopes, and only a
+    /// function body severs the chain. The scope is popped on all three exits —
+    /// fell through, returned, failed — so an `Err` leaves `env` usable, which
+    /// matters because a `while` in a caller may still be running.
+    fn block(&mut self, body: &[Stmt], env: &mut Env, out: &mut Output) -> Result<Option<Value>> {
+        env.push_scope();
+        let r = self.exec_body(body, env, out);
+        env.pop_scope();
+        r
+    }
+
+    /// An `if`/`while` condition: §6/`.40` — no truthiness, one `as_bool`.
+    ///
+    /// The line is §6b's, the failing **operand**'s, so a condition split from
+    /// its keyword reports where the value is.
+    fn condition(
+        &mut self,
+        cond: &Expr,
+        stmt_line: u32,
+        env: &mut Env,
+        out: &mut Output,
+    ) -> Result<bool> {
+        let v = self.eval(cond, env, out)?;
+        v.as_bool(line_of(cond, stmt_line))
+    }
+
+    /// Define every hoisted function, then walk the top-level statements.
+    ///
+    /// Split out of [`Engine::run`] so the whole body is one `Result` and the
+    /// `?`s read straight down: `run` folds it into the `Output` with
+    /// [`Output::finish`], and the lines printed before a failure are already
+    /// in there.
+    fn run_program(&mut self, src: &str, out: &mut Output) -> Result<()> {
+        // A `Lex` or `Parse` error escapes here having run nothing, so `out` is
+        // still empty — corpus `315`/`317` assert exactly that.
+        let program = crate::front::parser::parse(src)?;
+        let mut env = Env::new();
+        // §2 hoisting, from `Program::fns` ONLY and before the first statement:
+        // `stmts` still holds a `Stmt::Fn` wherever one was written, and
+        // defining there too would define every function twice.
+        for f in &program.fns {
+            env.define_fn(Rc::clone(f));
+        }
+        // Top-level scope IS global scope (§6/`.37`), so no `push_scope` here.
+        // `return` outside a function is a `Parse` error, so the front end has
+        // already made a `Some` unreachable and there is nothing to do with it.
+        let _ = self.exec_body(&program.stmts, &mut env, out)?;
+        Ok(())
+    }
+}
+
+/// The stack [`Engine::run`](crate::engine::Engine::run) gives the evaluator.
+///
+/// §6/`.36` sets the limit at 1000 **active invocations** and says in as many
+/// words that the tree-walker runs on a bigger thread if that overflows the test
+/// stack — the limit is observable and one engine may not tune it down to fit.
+/// A tree-walker recurses in Rust for every level, so 1000 of them do not fit in
+/// a 2 MiB thread: without this the corpus's `225`/`226`/`310` abort the whole
+/// process, which §4 forbids outright.
+///
+/// 64 MiB is a reservation, not an allocation — Linux commits pages on touch —
+/// and it is the size the depth test in this file already runs green on.
+const EVAL_STACK: usize = 64 << 20;
+
+/// One whole run on the current thread. Fresh evaluator, fresh `Env`.
+fn run_source(src: &str) -> Output {
+    let mut out = Output::new();
+    let r = Eval::new().run_program(src, &mut out);
+    // `out` already holds every line printed before the failure (§3), so
+    // folding the terminating `Result` in at the end loses nothing.
+    out.finish(r)
+}
+
+/// **FROZEN `engine.rs`, §3** — group B's whole pipeline, from source bytes.
+///
+/// `run` is infallible: every failure, at any stage, is `Output.error`.
+impl crate::engine::Engine for Eval {
+    fn name(&self) -> &'static str {
+        "tree"
+    }
+
+    /// Runs on a thread with [`EVAL_STACK`], from a **fresh** evaluator.
+    ///
+    /// Fresh rather than from `self` because §3 requires nothing observable to
+    /// carry over between two `run` calls, and a state that does not exist
+    /// cannot leak — a `depth` left non-zero by an earlier run would show up as
+    /// a silently off-by-N recursion limit, which is the worst shape a bug can
+    /// have here.
+    ///
+    /// The thread is an implementation detail: `Output` is plain data, so
+    /// nothing about it reaches the caller, and no other engine or harness has
+    /// to know. That is why it lives here and not in `tests/conform.rs` — the
+    /// CLI and the fuzzer need it just as much and would each have to remember.
+    fn run(&mut self, src: &str) -> Output {
+        std::thread::scope(|s| {
+            match std::thread::Builder::new()
+                .stack_size(EVAL_STACK)
+                .spawn_scoped(s, || run_source(src))
+            {
+                Ok(h) => h.join().unwrap_or_else(|_| {
+                    // §4 forbids a panic on any input, so reaching this is a bug
+                    // in this engine and not something the program did. Report
+                    // it as the engine fault it is (§6/`.45`) instead of
+                    // re-panicking and taking the harness down with it.
+                    let mut out = Output::new();
+                    out.fail(TreadleError::internal(0, "the tree-walker panicked"));
+                    out
+                }),
+                // The OS refused a thread. Nothing in the program caused that,
+                // so run inline rather than blame it: correct for every program
+                // that does not recurse near the limit, which is the only thing
+                // the big stack was ever for.
+                Err(_) => run_source(src),
+            }
+        })
+    }
+}
+
+/// **§6b, both halves, in one place** — the line a Bool-gate failure reports:
+/// the operand's own where it has one, the `enclosing` node's where it does not.
+///
+/// `Expr::Lit(Value)` is the one frozen variant (§3) with no `line`, so it is
+/// the whole of the second case. §6b requires this to be a single helper rather
+/// than a decision repeated at each `as_bool` site, precisely because the
+/// fallback is observable whenever an operator is split across source lines —
+/// two sites that chose differently would be a divergence nobody could
+/// attribute.
+fn line_of(e: &Expr, enclosing: u32) -> u32 {
+    match e {
+        Expr::Lit(_) => enclosing,
+        Expr::Var { line, .. }
+        | Expr::Unary { line, .. }
+        | Expr::Binary { line, .. }
+        | Expr::Call { line, .. } => *line,
     }
 }
 
@@ -1006,6 +1199,261 @@ mod tests {
     }
 
     // ---- §4: no panic, and no wording of our own --------------------------
+
+    // =======================================================================
+    // Statements, control flow and the `Engine` path — bead `.20`
+    // =======================================================================
+
+    /// A whole program, rendered exactly as `tests/conform.rs` compares it.
+    ///
+    /// Source in, §5 canonical bytes out: these assertions go through the same
+    /// `Engine::run` the harness drives, so a statement test cannot pass against
+    /// a hand-built `Env` that the real entry point never constructs that way.
+    fn run_src(src: &str) -> String {
+        use crate::engine::Engine as _;
+        Eval::new().run(src).to_string()
+    }
+
+    /// One rendered error line, built from `error.rs` rather than spelled out —
+    /// §4 forbids a message literal here as much as anywhere else.
+    fn err_line(e: TreadleError) -> String {
+        format!("{e}\n")
+    }
+
+    #[test]
+    fn every_statement_kind_executes() {
+        // `let`, `assign`, `print` with several arguments, `if`/`else`, `while`,
+        // and a `fn` declaration reached as a statement (a no-op).
+        assert_eq!(
+            run_src(
+                "let x = 1;\n\
+                 x = x + 1;\n\
+                 print \"x\", x, true;\n\
+                 if x == 2 { print \"then\"; } else { print \"else\"; }\n\
+                 if x == 9 { print \"no\"; }\n\
+                 while x < 5 { print x; x = x + 1; }\n\
+                 fn later() { return 1; }\n\
+                 print later();\n"
+            ),
+            "x\t2\ttrue\nthen\n2\n3\n4\n1\n"
+        );
+        // A `while` whose condition is false at entry runs zero times.
+        assert_eq!(run_src("while false { print 1; }\nprint 2;\n"), "2\n");
+    }
+
+    /// §2: an `if`/`while` body is a scope, so a `let` inside one is gone
+    /// afterwards, while an `assign` reaches **outward** to the existing binding.
+    #[test]
+    fn a_block_is_a_scope_and_assignment_reaches_outward() {
+        assert_eq!(
+            run_src(
+                "let x = 1;\n\
+                 if true { let x = 2; print x; }\n\
+                 print x;\n\
+                 if true { x = 3; }\n\
+                 print x;\n"
+            ),
+            "2\n1\n3\n"
+        );
+        // A `let` confined to a block does not survive it: the read at line 3
+        // is a `Name` error, at the Var's line and not the statement's.
+        assert_eq!(
+            run_src("if true { let inner = 1; }\nprint 0;\nprint inner;\n"),
+            format!("0\n{}", err_line(TreadleError::undefined_name(3, "inner")))
+        );
+    }
+
+    /// **The pinned edge**: `return` leaves the FUNCTION, not just the innermost
+    /// loop, through any depth of `while`/`if` bodies — and the loops still
+    /// terminate normally when it never fires (the `-1` fall-through).
+    #[test]
+    fn return_unwinds_out_of_nested_loops_to_the_function_boundary() {
+        let src = "fn find(limit) {\n\
+                     let i = 0;\n\
+                     while i < limit {\n\
+                       let j = 0;\n\
+                       while j < limit {\n\
+                         if i * j == 6 { return i * 100 + j; }\n\
+                         j = j + 1;\n\
+                       }\n\
+                       i = i + 1;\n\
+                     }\n\
+                     return -1;\n\
+                   }\n\
+                   print find(10);\n\
+                   print find(2);\n";
+        assert_eq!(run_src(src), "106\n-1\n");
+    }
+
+    /// A `return` is control flow, not an error: it must not reach `Output.error`
+    /// however deeply it was nested, and the statements after it must not run.
+    #[test]
+    fn a_return_is_never_an_error_and_stops_the_body() {
+        // `return;` yields Nil AND stops the body — a valueless return treated
+        // as a no-op would print `after`.
+        assert_eq!(
+            run_src("fn early() {\n print \"before\";\n return;\n print \"after\";\n}\nprint early();\n"),
+            "before\nnil\n"
+        );
+        // Deep inside nested blocks, and the caller keeps running afterwards.
+        assert_eq!(
+            run_src(
+                "fn deep() {\n\
+                   while true { if true { while true { return \"out\"; } } }\n\
+                 }\n\
+                 print deep();\n\
+                 print \"after the call\";\n"
+            ),
+            "out\nafter the call\n"
+        );
+        // A function that falls off the end is Nil (§2), not an error either.
+        assert_eq!(run_src("fn f() { }\nprint f();\n"), "nil\n");
+    }
+
+    /// §2 hoisting: `Program::fns` is defined before the first statement, so a
+    /// call may precede the declaration — including mutual recursion, where
+    /// neither declaration can come first.
+    #[test]
+    fn functions_are_hoisted_so_a_call_may_precede_the_declaration() {
+        assert_eq!(
+            run_src("print twice(2);\nfn twice(n) { return n * 2; }\n"),
+            "4\n"
+        );
+        assert_eq!(
+            run_src(
+                "fn even(n) { if n == 0 { return true; } return odd(n - 1); }\n\
+                 fn odd(n) { if n == 0 { return false; } return even(n - 1); }\n\
+                 print even(10), odd(10);\n"
+            ),
+            "true\tfalse\n"
+        );
+        // A `fn` inside a branch that never runs is still callable, because the
+        // declaration is not a runtime action.
+        assert_eq!(
+            run_src("if false { fn dead() { return 7; } }\nprint dead();\n"),
+            "7\n"
+        );
+    }
+
+    /// Wrong arity is a `Type` error naming the expected and the actual count,
+    /// in both directions and for a zero-parameter function.
+    #[test]
+    fn wrong_arity_is_a_type_error_naming_expected_and_actual() {
+        for (src, want) in [
+            ("fn f(a, b) { return a; }\nprint f(1);\n", (2usize, 1usize)),
+            ("fn f(a) { return a; }\nprint f(1, 2);\n", (1, 2)),
+            ("fn f() { return 1; }\nprint f(1);\n", (0, 1)),
+        ] {
+            let (expected, actual) = want;
+            assert_eq!(
+                run_src(src),
+                err_line(TreadleError::wrong_arity(2, "f", expected, actual)),
+                "{src}"
+            );
+        }
+    }
+
+    /// §6/`.36` end to end: 1000 active invocations succeed, the 1001st is a
+    /// `Value` error at the **call's** line — never a stack overflow, which
+    /// `Engine::run`'s own thread is what makes true.
+    #[test]
+    fn recursion_stops_at_the_limit_through_the_engine_path() {
+        // `down(n)` makes n+1 invocations, so 999 is exactly MAX_DEPTH.
+        let src = "fn down(n) {\n\
+                     if n == 0 { return \"bottom\"; }\n\
+                     return down(n - 1);\n\
+                   }\n\
+                   print down(999);\n";
+        assert_eq!(run_src(src), "bottom\n");
+        assert_eq!(
+            MAX_DEPTH, 1000,
+            "the depth cases below are written for 1000"
+        );
+
+        // One deeper: the error is at line 3, the recursive call inside the
+        // body, not line 5 where the top-level call is.
+        let over = src.replace("down(999)", "down(1000)");
+        assert_eq!(run_src(&over), err_line(TreadleError::recursion_limit(3)));
+        // Sequential calls do not accumulate: 3000 of them each return before
+        // the next starts, so the depth never passes 2.
+        assert_eq!(
+            run_src(
+                "fn tick(n) { return n + 1; }\n\
+                 let i = 0;\n\
+                 while i < 3000 { i = tick(i); }\n\
+                 print i;\n"
+            ),
+            "3000\n"
+        );
+    }
+
+    /// §6b: an `as_bool` failure reports the line of the **failing operand**,
+    /// not the `Binary` node's — observable only when an operator is split
+    /// across lines. `eval-expr` used the node's line; this is the fix.
+    #[test]
+    fn as_bool_reports_the_failing_operands_line() {
+        // The `x` is on line 2, the `and` on line 3.
+        assert_eq!(
+            run_src("let x = 1;\nprint x\nand true;\n"),
+            err_line(TreadleError::not_bool(2, "Int"))
+        );
+        // The right operand, once it is reached, likewise reports its own line.
+        assert_eq!(
+            run_src("let x = 1;\nprint true\nand x;\n"),
+            err_line(TreadleError::not_bool(3, "Int"))
+        );
+        // An `if`/`while` condition is the same gate on the same rule.
+        assert_eq!(
+            run_src("let n = 1;\nif\nn\n{ print 0; }\n"),
+            err_line(TreadleError::not_bool(3, "Int"))
+        );
+        // THE FALLBACK ARM (§6b / bead `.pqj`): a literal operand has no line
+        // in the frozen AST, so the enclosing node's is reported — here the
+        // `Binary`, which the parser puts on line 2 with the `and`. This is the
+        // arm nobody can get right by guessing, hence an assertion and not a
+        // comment.
+        assert_eq!(
+            run_src("print 1\nand true;\n"),
+            err_line(TreadleError::not_bool(2, "Int"))
+        );
+    }
+
+    /// The `Engine` contract itself (§3): the name, an empty `Output` for a
+    /// front-end error, lines kept ahead of a runtime error, and two runs of one
+    /// evaluator being independent.
+    #[test]
+    fn the_engine_impl_meets_its_contract() {
+        use crate::engine::Engine as _;
+        let mut e = Eval::new();
+        assert_eq!(e.name(), "tree");
+
+        // A `Lex` and a `Parse` error each run NOTHING, so `lines` is empty
+        // (corpus `315`, `317`) — the rendering is the error alone.
+        let lexed = e.run("print \"unterminated;\n");
+        assert!(lexed.lines.is_empty(), "a lex error printed: {lexed:?}");
+        assert!(lexed.failed());
+        let parsed = e.run("return 1;\n");
+        assert_eq!(
+            parsed.lines,
+            Vec::<String>::new(),
+            "a parse error printed: {parsed:?}"
+        );
+        assert_eq!(parsed.error, Some(TreadleError::return_outside_fn(1)));
+
+        // Lines produced before a runtime failure survive (§3), including from
+        // the iterations of a loop that had already run.
+        assert_eq!(
+            run_src("let i = 0;\nwhile i < 9 { print i; i = i + 1; if i == 2 { print 1 / 0; } }\n"),
+            format!("0\n1\n{}", err_line(TreadleError::divide_by_zero(2)))
+        );
+
+        // Determinism: the same source twice on the SAME evaluator, straight
+        // after a run that hit the recursion limit, which is where a leaked
+        // `depth` would show up.
+        let _ = e.run("fn r() { return r(); }\nprint r();\n");
+        assert_eq!(e.run("print 1;\n"), e.run("print 1;\n"));
+        assert_eq!(e.run("print 1;\n").to_string(), "1\n");
+    }
 
     /// The `internal` guard on the strict path is unreachable through `eval`
     /// but must not be a panic (§4). Asserted directly, since no program can
